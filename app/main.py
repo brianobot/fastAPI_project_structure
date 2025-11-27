@@ -93,7 +93,3 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
-
-@app.get("/", tags=["Root"])
-async def root():
-    return RedirectResponse("/docs")
