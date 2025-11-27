@@ -22,4 +22,3 @@ async def signup(
     request_data: auth_schemas.UserSignUpData,
 ):
     return await auth_services.signup_user(request_data, db)
-

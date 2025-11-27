@@ -16,4 +16,3 @@ class UserModel(BaseModel):
     email: EmailStr
     date_created: datetime
     date_updated: datetime
-

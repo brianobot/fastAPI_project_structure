@@ -71,5 +71,3 @@ async def signup_user(
     session: AsyncSession,
 ):
     return await create_user(data, session)
-
-

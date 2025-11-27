@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 
 from app.settings import Settings
 
-settings = Settings() # noqa
+settings = Settings()  # noqa
 
 # Add Support for Both ASYNC and SYNC Database URLs
 # With Async being the center of focus

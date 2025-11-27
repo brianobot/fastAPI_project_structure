@@ -36,7 +36,6 @@ class AbstractBase(DeclarativeBase):
     )
 
 
-
 class User(AbstractBase):
     __tablename__ = "users"
 

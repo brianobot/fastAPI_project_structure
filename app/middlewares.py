@@ -20,4 +20,3 @@ async def log_request_middleware(request: Request, call_next):
 
     logger.info(log_dict)
     return response
-
