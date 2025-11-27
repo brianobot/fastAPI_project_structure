@@ -6,7 +6,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 from fastapi import HTTPException
@@ -14,8 +13,6 @@ from fastapi import FastAPI
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-
-from redis import asyncio as aioredis
 
 from app.logger import logger
 from app.api_router import api
@@ -54,6 +51,8 @@ def initiate_app():
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=[
+            "127.0.0.1",
+            "localhost",
             # Add allowed hosts here
         ],
     )
