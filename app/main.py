@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, UTC
-from fastapi import FastAPI
 
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware

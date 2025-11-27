@@ -4,9 +4,6 @@ from fastapi import Request, Response
 from app.logger import logger
 
 
-BLOCKED_IPS = []
-
-
 async def log_request_middleware(request: Request, call_next):
     start = time.time()
 
