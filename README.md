@@ -7,6 +7,9 @@ This repository provides a clean and scalable template for building FastAPI appl
 - Organized project structure
 - Environment configuration
 - Dependency management
+- Initial User Model and User Authentication Endpoints with Unit Tests
+- Unit Test Configuration with Pytest (With Async Support)
+- Alembic Data Migration Configuration
 
 
 ## Project Structure
