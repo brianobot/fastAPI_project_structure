@@ -23,7 +23,7 @@ class RefreshTokenModel(BaseModel):
 
 class UserSignUpData(BaseModel):
     password: Annotated[str, Field(min_length=8, max_length=50)]
-    email: Annotated[EmailStr, Field(max_length=254), AfterValidator(str.lower)]
+    username: Annotated[str, Field(max_length=254), AfterValidator(str.lower)]
     
 
 class UserVerificationData(BaseModel):
@@ -38,14 +38,14 @@ class PasswordResetData(BaseModel):
 
 
 class UserSignInData(BaseModel):
-    email: Annotated[EmailStr, Field(max_length=100), AfterValidator(str.lower)]
+    username: Annotated[EmailStr, Field(max_length=100), AfterValidator(str.lower)]
     password: Annotated[str, Field(min_length=8)]
 
 
 class UserModel(BaseModel):
     id: UUID
 
-    email: EmailStr
+    username: EmailStr
     date_created: datetime
     date_updated: datetime
 

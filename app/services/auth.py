@@ -43,8 +43,8 @@ def get_password_hash(password: str):
     ).decode()
 
 
-async def get_user(email: EmailStr, session: AsyncSession) -> UserDB | None:
-    stmt = select(UserDB).where(UserDB.email == email)
+async def get_user(username: EmailStr, session: AsyncSession) -> UserDB | None:
+    stmt = select(UserDB).where(UserDB.username == username)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -54,14 +54,14 @@ async def create_user(
     session: AsyncSession,
 ):
     result = await session.execute(
-        select(UserDB).where(UserDB.email == user_data.email)
+        select(UserDB).where(UserDB.username == user_data.username)
     )
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     hashed_password = get_password_hash(user_data.password)
     new_user = UserDB(
-        email=user_data.email,
+        username=user_data.username,
         password=hashed_password,
     )
 
@@ -92,7 +92,7 @@ async def verify_user(
     background_task.add_task(
         send_mail,
         subject="Welcome to {Project Name}",
-        receipients=[user.email],
+        receipients=[verification_data.email],
         payload={"name": user.username},
         template="auth/welcome.html",
     )
@@ -114,11 +114,11 @@ async def resend_verification_code(
         key=f"verification-code-{email}", value={"code": code}
     )
 
-    first_name = cast(UserDB, user).email.split("@")[0]
+    first_name = email.split("@")[0]
     background_task.add_task(
         send_mail,
         subject="OTP Verification",
-        receipients=[user.email],
+        receipients=[email],
         payload={"name": first_name, "otp": code},
         template="auth/verification.html",
     )
@@ -141,7 +141,7 @@ async def initiate_password_reset(
     background_task.add_task(
         send_mail,
         subject="Password Reset",
-        receipients=[user.email],
+        receipients=[email],
         payload={"username": user.username.title(), "code": code},
         template="auth/initiate_password_reset.html",
     )

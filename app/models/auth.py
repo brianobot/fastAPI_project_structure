@@ -13,6 +13,6 @@ if TYPE_CHECKING:
 class User(AbstractBase):
     __tablename__ = "users"
 
-    email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
     password: Mapped[str]
     
