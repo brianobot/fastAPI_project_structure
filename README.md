@@ -3,13 +3,18 @@
 This repository provides a clean and scalable template for building FastAPI applications. It is designed to help you start new projects quickly with best practices in mind.
 
 ## Features
-
 - Organized project structure
 - Environment configuration
 - Dependency management
 - Initial User Model and User Authentication Endpoints with Unit Tests
 - Unit Test Configuration with Pytest (With Async Support)
 - Alembic Data Migration Configuration
+
+
+## Getting Started
+In order to get started with the FastAPI Project, follow the following steps
+- Create an .env file from the .env.example file and provide values for missing environment variables 
+- Install ```make``` if you do not already have it and run the command ```make run-local``` to start you local server
 
 
 ## Project Structure
