@@ -26,12 +26,14 @@ async def lifespan(app: FastAPI):
     yield
 
 
+
 def initiate_app():
     app = FastAPI(
-        title="FastAPI Sample Project",
-        summary="API for FastAPI Sample Project",
+        title= settings.PROJECT_NAME,
+        summary=settings.PROJECT_SUMMARY,
         lifespan=lifespan,
     )
+
 
     origins = [
         # Add allowed origins here
@@ -65,6 +67,10 @@ def initiate_app():
 
 
 app = initiate_app()
+
+@app.get("/")
+def read_root():
+    return {"message: FastAPI project structure"}
 
 
 @app.exception_handler(HTTPException)
