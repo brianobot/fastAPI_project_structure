@@ -28,8 +28,9 @@ async def lifespan(app: FastAPI):
 
 def initiate_app():
     app = FastAPI(
-        title="FastAPI Sample Project",
-        summary="API for FastAPI Sample Project",
+        title="{{ project_name }}",
+        version="{{ project_version }}",
+        summary="{{ project_description }}",
         lifespan=lifespan,
     )
 
