@@ -13,8 +13,24 @@ This repository provides a clean and scalable template for building FastAPI appl
 
 ## Getting Started
 In order to get started with the FastAPI Project, follow the following steps
-- Create an .env file from the .env.example file and provide values for missing environment variables 
-- Install ```make``` if you do not already have it and run the command ```make run-local``` to start you local server
+- [ ] Create an .env file from the .env.example file and provide values for missing environment variables
+      - 1. Update the DATABASE_URL to point at an accessible DATABASE server
+      - 2. Update the MAIL_CONFIG section to include mail server credentials
+- [ ] Install ```make``` if you do not already have it and run the command ```make run-local``` to start you local server
+- [ ] Apply Initial Database Migration for Ensure Database Connection string is valid
+      ```bash
+      alembic upgrade head
+      ```
+- [ ] Ensure the Setup Is Complete and Sucessful by Running the following command
+      ```bash
+      make test-local
+      ```
+      If all the tests pass successfully you're good to start working on your project.
+
+- [ ] Start Local Server with the following command
+      ```bash
+      make run-local
+      ```
 
 
 ## Project Structure
