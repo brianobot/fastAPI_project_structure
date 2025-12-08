@@ -16,6 +16,9 @@ In order to get started with the FastAPI Project, follow the following steps
 - Create an .env file from the .env.example file and provide values for missing environment variables 
 - Install ```make``` if you do not already have it and run the command ```make run-local``` to start you local server
 
+## NOTES
+- After making Changes to your Model(s) in the models/ directory, ensure the Model class is Imported in the __init__ module of the models directory, this way, the configured alembic for your project can pick up models changes for Migrations
+- 
 
 ## Project Structure
 
