@@ -15,4 +15,3 @@ class User(AbstractBase):
 
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     password: Mapped[str]
-    
