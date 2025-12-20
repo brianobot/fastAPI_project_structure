@@ -3,3 +3,5 @@ venv/
 logs/
 .env
 .pytest_cache/
+.coverage
+
