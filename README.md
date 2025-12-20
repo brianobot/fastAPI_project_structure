@@ -67,32 +67,44 @@ fastapi-project-structure/
 └── requirements.txt
 ```
 
-## Getting Started
+## How to Download Complete Project Structure from Github
 
 1. **Clone the repository:**
     ```bash
     git clone https://github.com/brianobot/fastAPI_project_structure.git
     cd fastAPI_project_structure
     ```
+  
+2. **Create & Activate Virtual Environment to Manage Project Dependency In Isolation**
+    ```bash
+    python3 -m venv venv && source venv/bin/activate #for unix computers 
+    ```
 
-2. **Install dependencies:**
+3. **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
 
-3. **Run the application:**
+4. **Run the application:**
     ```bash
     make run-local # or uvicorn app.main:app --reload
     ```
 
-4. **Access the API docs:**
+5. **Access the API docs:**
     - Open [http://localhost:8000/docs](http://localhost:8000/docs) in your browser.
 
-## Testing
 
-Run tests using pytest:
+## Testing
+Run initial tests using pytest:
 ```bash
-pytest
+make test-local # or pytest
+```
+
+or 
+
+Run Specific tests 
+```bash
+pytest -s app/routers/tests/test_auth.py
 ```
 
 ## Environment Variables
