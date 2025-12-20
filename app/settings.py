@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str  # required environment variable
 
-    JWT_SECRET: str  # required environment variable
+    JWT_SECRET: str = "" # required environment variable
     JWT_ALGORITHM: str = "HS256"  # optional environement variable with default value
     
     REDIS_HOST: str = "localhost"

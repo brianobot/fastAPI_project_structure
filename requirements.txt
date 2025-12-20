@@ -58,3 +58,4 @@ greenlet==3.2.4
 aiosqlite==0.21.0
 pytest-cov==7.0.0
 pytest==9.0.2
+sqlalchemy==2.0.45
