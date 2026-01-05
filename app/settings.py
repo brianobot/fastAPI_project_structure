@@ -12,3 +12,10 @@ class Settings(BaseSettings):
     
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    
+    MAIL_USERNAME: str
+    MAIL_PASSWORD: str
+    MAIL_FROM: str
+    MAIL_PORT: str
+    MAIL_SERVER: str
+    MAIL_FROM_NAME: str
