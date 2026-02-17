@@ -4,13 +4,17 @@
 
 This repository provides a clean and scalable template for building FastAPI applications. It is designed to help you start new projects quickly with best practices in mind.
 
-## Features
-- Organized project structure
-- Environment configuration
-- Dependency management
-- Initial User Model and User Authentication Endpoints with Unit Tests
-- Unit Test Configuration with Pytest (With Async Support)
-- Alembic Data Migration Configuration
+## ⚡️ Features Included
+- 📘 Organized project structure
+- 🗒️ [Predefined Environment Configuration](./app/settings.py) with [Pydantic-Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
+- 🛜 Dependency management Setup for [Common Dependencies](./app/dependencies.py)
+  - `get_db`: Async Database Session Dependency
+  - `get_current_user`: Async User dependency, Extract user Database with Access Token in request, raises 401 Http Exception if token is not valid
+
+- 👤 Initial [User Model](./app/models/auth.py) and [User Authentication Endpoints](./app/routers/auth.py) with [Unit Tests](./app/routers/tests/test_auth.py)
+- 📝 [Predefined Logging](./app/logger.py) Configuration
+- ⚙️ Unit Test Configuration with Pytest (With Async Support)
+- ⏺️ [Alembic Data Migration](./alembic) Configuration and [alembic.ini](alembic.ini)
 
 
 ## Getting Started
@@ -36,7 +40,6 @@ In order to get started with the FastAPI Project, follow the following steps
 
 ## NOTES
 - After making Changes to your Model(s) in the models/ directory, ensure the Model class is Imported in the __init__ module of the models directory, this way, the configured alembic for your project can pick up models changes for Migrations
-- 
 
 ## Project Structure
 
@@ -115,5 +118,4 @@ Copy `.env.example` to `.env` and update the values as needed.
 
 
 ## Contributing
-
 Contributions are welcome! Please open issues or submit pull requests.
