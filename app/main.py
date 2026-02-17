@@ -51,6 +51,7 @@ def initiate_app():
     app.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=[
+            "test",
             "127.0.0.1",
             "localhost",
             # Add allowed hosts here
