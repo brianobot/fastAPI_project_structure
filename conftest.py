@@ -1,21 +1,19 @@
-import pytest
-import typing 
-
+import typing
 from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
-from app.settings import Settings
-from app.dependencies import get_db
-from app.models._base import AbstractBase
-
-from sqlalchemy import StaticPool
+import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import StaticPool
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.dependencies import get_db
+from app.main import app
+from app.models._base import AbstractBase
+from app.settings import Settings
 
 if typing.TYPE_CHECKING:
-    from app.models import User as UserDB
-    
+    pass
+
 
 settings = Settings()
 

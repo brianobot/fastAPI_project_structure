@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-
 from app.models._base import AbstractBase
 
 if TYPE_CHECKING:

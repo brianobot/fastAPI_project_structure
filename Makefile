@@ -5,10 +5,10 @@ run-local:
 
 test-local:
 	pytest -s --cov
-	
+
 apply-migration:
 	alembic upgrade head
-	
+
 coverage-report:
 	coverage report
 

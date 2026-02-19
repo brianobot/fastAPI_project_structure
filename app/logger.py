@@ -1,6 +1,5 @@
-import logging
 import json
-
+import logging
 from logging.handlers import TimedRotatingFileHandler
 
 logger = logging.getLogger()

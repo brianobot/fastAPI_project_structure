@@ -1,6 +1,6 @@
-from uuid import UUID
-from typing import Annotated
 from datetime import datetime
+from typing import Annotated
+from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, EmailStr, Field, model_validator
 
@@ -24,7 +24,7 @@ class RefreshTokenModel(BaseModel):
 class UserSignUpData(BaseModel):
     password: Annotated[str, Field(min_length=8, max_length=50)]
     email: Annotated[EmailStr, Field(max_length=254), AfterValidator(str.lower)]
-    
+
 
 class UserVerificationData(BaseModel):
     email: EmailStr

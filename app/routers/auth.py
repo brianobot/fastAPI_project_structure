@@ -1,15 +1,14 @@
 from typing import Annotated
 
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, status
 from fastapi.routing import APIRouter
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import EmailStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi import Depends, status, Body, BackgroundTasks, HTTPException
 
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
 from app.models import User as UserDB
 from app.schemas import auth as auth_schemas
-from app.dependencies import get_current_user
 from app.services import auth as auth_services
 from app.settings import Settings
 
@@ -24,10 +23,10 @@ EmailBody = Annotated[EmailStr, Body(embed=True)]
 CurrentUserDep = Annotated[UserDB, Depends(get_current_user)]
 
 
-@router.post("/signup", response_model=auth_schemas.UserModel) 
+@router.post("/signup", response_model=auth_schemas.UserModel)
 async def signup(
     db: DBDep,
-    bg_task: BackgroundTasks, # needed to send verification/welcome email
+    bg_task: BackgroundTasks,  # needed to send verification/welcome email
     request_data: auth_schemas.UserSignUpData,
 ):
     return await auth_services.signup_user(request_data, db, bg_task)
@@ -73,8 +72,7 @@ async def signin(db: DBDep, form_data: Annotated[OAuth2PasswordRequestForm, Depe
 
 @router.post("/logout")
 async def logout(
-    _: CurrentUserDep,
-    token: Annotated[str, Depends(auth_services.oauth2_scheme)]
+    _: CurrentUserDep, token: Annotated[str, Depends(auth_services.oauth2_scheme)]
 ):
     return await auth_services.logout(token)
 
@@ -101,4 +99,3 @@ async def update_user_detail(
     update_data: auth_schemas.UpdateUserModel,
 ):
     return await auth_services.update_user(user.email, update_data, db)
-

@@ -1,17 +1,18 @@
 import json
+from typing import Any, cast
+
 import redis
-from typing import Any
 
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings()  # type: ignore
 
 
 class RedisManager:
     def __init__(self):
         self.redis_client = redis.Redis(
-            host=settings.REDIS_HOST, 
-            port=settings.REDIS_PORT, 
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
             decode_responses=True,
         )
 
@@ -25,7 +26,7 @@ class RedisManager:
         if value is None:
             return default
 
-        value_decoded = json.loads(value)
+        value_decoded = json.loads(cast(str, value))
         return value_decoded
 
     def delete_key(self, key: str) -> None:

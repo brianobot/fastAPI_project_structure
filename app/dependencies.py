@@ -1,9 +1,9 @@
-import jwt
-from typing import AsyncGenerator, Annotated
+from typing import Annotated, AsyncGenerator
 
+import jwt
+from fastapi import Depends, HTTPException, status
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, Depends, status
 
 from app.database import AsyncSessionLocal
 from app.models.auth import User as UserDB

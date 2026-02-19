@@ -1,7 +1,7 @@
-import pytest
 import faker
-
+import pytest
 from httpx import AsyncClient
+
 from app.models.auth import User as UserDB
 
 faker = faker.Faker()

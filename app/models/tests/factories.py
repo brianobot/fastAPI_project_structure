@@ -1,11 +1,9 @@
 import factory
-
 from faker import Faker
+
 from app.models import User as UserDB
 from app.services.auth import get_password_hash
-
 from conftest import TestingSessionLocal
-
 
 faker = Faker()
 
@@ -18,4 +16,3 @@ class UserFactory(factory.alchemy.SQLAlchemyModelFactory):
 
     email = faker.email().lower()
     password = get_password_hash("password")
-    

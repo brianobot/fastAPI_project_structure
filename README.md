@@ -22,7 +22,7 @@ In order to get started with the FastAPI Project, follow the following steps
 - [ ] Activate Project Python Virtual Environment
    ```bash
     source venv/bin/activate # this is for Unix systems
-    ``` 
+    ```
 - [ ] Create an .env file from the .env.example file and provide values for missing environment variables
       - 1. Update the DATABASE_URL to point at an accessible DATABASE server
       - 2. Update the MAIL_CONFIG section to include mail server credentials
@@ -83,10 +83,10 @@ fastapi-project-structure/
     git clone https://github.com/brianobot/fastAPI_project_structure.git
     cd fastAPI_project_structure
     ```
-  
+
 2. **Create & Activate Virtual Environment to Manage Project Dependency In Isolation**
     ```bash
-    python3 -m venv venv && source venv/bin/activate #for unix computers 
+    python3 -m venv venv && source venv/bin/activate #for unix computers
     ```
 
 3. **Install dependencies:**
@@ -109,9 +109,9 @@ Run initial tests using pytest:
 make test-local # or pytest
 ```
 
-or 
+or
 
-Run Specific tests 
+Run Specific tests
 ```bash
 pytest -s app/routers/tests/test_auth.py
 ```

@@ -1,23 +1,21 @@
-import jwt
-import bcrypt
-
+from datetime import UTC, datetime, timedelta
 from random import randint
 from typing import Literal, cast
-from datetime import timedelta, datetime, UTC
 
+import bcrypt
+import jwt
+from fastapi import BackgroundTasks, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import HTTPException, status, BackgroundTasks
-
 from pydantic.networks import EmailStr
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logger import logger
 from app.mailer import send_mail
-from app.settings import Settings
 from app.models import User as UserDB
 from app.redis_manager import redis_manager
 from app.schemas import auth as auth_schema
+from app.settings import Settings
 
 settings = Settings()
 
@@ -28,6 +26,7 @@ ACCESS_TOKEN_LIFESPAN = timedelta(days=14)
 REFRESH_TOKEN_LIFESPAN = timedelta(days=28)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/token")
+
 
 def verify_password(plain_password: str, hashed_password: str):
     return bcrypt.checkpw(
@@ -93,11 +92,11 @@ async def verify_user(
         send_mail,
         subject="Welcome to {Project Name}",
         receipients=[user.email],
-        payload={"name": user.username},
+        payload={"name": user.email.split("@")[0]},
         template="auth/welcome.html",
     )
     return await update_user(
-        verification_data.email, auth_schema.UpdateUserModel(is_verified=True), session
+        verification_data.email, auth_schema.UpdateUserModel(), session
     )
 
 
@@ -195,9 +194,7 @@ async def update_user(
     new_password: str | None = data.pop("new_password", None)
     if new_password:
         user = await authenticate_user(
-            username=email, 
-            password=cast(str, old_password), 
-            session=session
+            username=email, password=cast(str, old_password), session=session
         )
         if not user:
             raise HTTPException(
@@ -242,9 +239,7 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
 
 
 async def authenticate_user(
-    username: EmailStr | str, 
-    password: str, 
-    session: AsyncSession
+    username: EmailStr | str, password: str, session: AsyncSession
 ) -> UserDB | Literal[False]:
     user: UserDB | None = await get_user(username, session)
     if not user:
@@ -273,9 +268,7 @@ async def signup_user(
 
 async def signin_user(data: auth_schema.UserSignInData, session: AsyncSession):
     user = await authenticate_user(
-        password=data.password, 
-        username=data.email, 
-        session=session
+        password=data.password, username=data.email, session=session
     )
     if not user:
         raise HTTPException(
@@ -284,12 +277,10 @@ async def signin_user(data: auth_schema.UserSignInData, session: AsyncSession):
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(
-        data={"sub": data.email}, 
-        expires_delta=ACCESS_TOKEN_LIFESPAN
+        data={"sub": data.email}, expires_delta=ACCESS_TOKEN_LIFESPAN
     )
     refresh_token = create_refresh_token(
-        data={"sub": data.email}, 
-        expires_delta=REFRESH_TOKEN_LIFESPAN
+        data={"sub": data.email}, expires_delta=REFRESH_TOKEN_LIFESPAN
     )
 
     return auth_schema.Token(

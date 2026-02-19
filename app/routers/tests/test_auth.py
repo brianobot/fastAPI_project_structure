@@ -31,7 +31,7 @@ async def test_signup_succeeds(client: AsyncClient, signup_data: dict[str, str])
             },
             422,
             "String should have at least 8 characters",
-        ),  
+        ),
         (
             {
                 "email": f"email@{'email' * 21}.com",
@@ -179,4 +179,3 @@ async def test_update_user_detail(
         response_data = response.json()
         assert "id" in response_data
         assert "email" in response_data
-
