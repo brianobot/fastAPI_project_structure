@@ -19,6 +19,10 @@ This repository provides a clean and scalable template for building FastAPI appl
 
 ## Getting Started
 In order to get started with the FastAPI Project, follow the following steps
+- [ ] Activate Project Python Virtual Environment
+   ```bash
+    source venv/bin/activate # this is for Unix systems
+    ``` 
 - [ ] Create an .env file from the .env.example file and provide values for missing environment variables
       - 1. Update the DATABASE_URL to point at an accessible DATABASE server
       - 2. Update the MAIL_CONFIG section to include mail server credentials
