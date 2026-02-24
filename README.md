@@ -1,4 +1,5 @@
 # FastAPI Project Structure Template
+You can Generate Project Interactively Based on this template with the [FastAPI Gen8 CLI Tool](https://pypi.org/project/fastapi-gen8/)
 
 [📖 Read Article here](https://medium.com/@brianobot9/the-ultimate-fastapi-project-blueprint-build-scalable-secure-and-maintainable-systems-with-ease-acbc4e058012)
 
