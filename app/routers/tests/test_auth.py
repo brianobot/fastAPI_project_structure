@@ -134,16 +134,21 @@ async def test_get_refresh_token(client: AsyncClient, user: UserDB):
     assert "refresh_expires_at" in response_data
 
 
-async def test_get_user_detail(client: AsyncClient, user: UserDB):
-    login_data = {"username": user.email, "password": "password"}
-    access_token = (
-        (await client.post("/v1/auth/token", data=login_data))
-        .json()
-        .get("access_token")
-    )
-    response: Response = await client.get(
-        "/v1/auth/me", headers={"Authorization": f"Bearer {access_token}"}
-    )
+async def test_logout(client: AsyncClient, auth_header: dict[str, str]):
+    successful_response = await client.get("v1/auth/me", headers=auth_header)
+    assert successful_response.status_code == 200
+
+    response = await client.post("v1/auth/logout", headers=auth_header)
+    assert response.status_code == 200
+
+    failed_response = await client.get("v1/auth/me", headers=auth_header)
+    assert failed_response.status_code == 401
+
+
+async def test_get_user_detail(
+    client: AsyncClient, user: UserDB, auth_header: dict[str, str]
+):
+    response: Response = await client.get("/v1/auth/me", headers=auth_header)
     assert response.status_code == 200
     response_data = response.json()
     assert "id" in response_data
@@ -158,21 +163,16 @@ async def test_get_user_detail(client: AsyncClient, user: UserDB):
 )
 async def test_update_user_detail(
     client: AsyncClient,
-    user: UserDB,
     update_data: dict,
     status_code: int,
     error_message: str,
+    user: UserDB,
+    auth_header: dict[str, str],
 ):
-    login_data = {"username": user.email, "password": "password"}
-    access_token = (
-        (await client.post("/v1/auth/token", data=login_data))
-        .json()
-        .get("access_token")
-    )
     response: Response = await client.patch(
         "/v1/auth/me",
         json=update_data,
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers=auth_header,
     )
     assert response.status_code == status_code
     if status_code == 202:
