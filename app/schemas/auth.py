@@ -26,9 +26,9 @@ class UserSignUpData(BaseModel):
     email: Annotated[EmailStr, Field(max_length=254), AfterValidator(str.lower)]
 
 
-class UserVerificationData(BaseModel):
+class UserVerificationModel(BaseModel):
     email: EmailStr
-    code: str
+    code: Annotated[str, Field(min_length=6, max_length=6)]
 
 
 class PasswordResetData(BaseModel):

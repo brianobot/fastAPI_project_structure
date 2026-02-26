@@ -17,7 +17,7 @@ from app.redis_manager import redis_manager
 from app.schemas import auth as auth_schema
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings()  # type: ignore
 
 JWT_SECRET = settings.JWT_SECRET
 JWT_ALGORITHM = settings.JWT_ALGORITHM
@@ -52,10 +52,8 @@ async def create_user(
     user_data: auth_schema.UserSignUpData,
     session: AsyncSession,
 ):
-    result = await session.execute(
-        select(UserDB).where(UserDB.email == user_data.email)
-    )
-    if result.scalar_one_or_none():
+    user = await get_user(user_data.email, session)
+    if user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     hashed_password = get_password_hash(user_data.password)
@@ -71,7 +69,7 @@ async def create_user(
 
 
 async def verify_user(
-    verification_data: auth_schema.UserVerificationData,
+    verification_data: auth_schema.UserVerificationModel,
     background_task: BackgroundTasks,
     session: AsyncSession,
 ):
@@ -80,13 +78,17 @@ async def verify_user(
     """
     data = redis_manager.get_json_item(f"verification-code-{verification_data.email}")
     if not isinstance(data, dict):
-        logger.error(f"Corrupt Log Data: {data}")
-        raise HTTPException(status_code=500, detail="Corrupted Cache Data")
+        logger.info(f"Corrupt Log Data: {data}")
+        raise HTTPException(status_code=404, detail="Invalid Verification Code")
+
     if not data or data.get("code") != verification_data.code:
-        raise HTTPException(status_code=400, detail="Invalid verification code")
+        logger.info("Invalid Verification Code")
+        raise HTTPException(status_code=400, detail="Invalid Verification Code")
+
     user = await get_user(verification_data.email, session)
     if not user:
-        raise HTTPException(status_code=404, detail="User not Found")
+        logger.info("User Not Found")
+        raise HTTPException(status_code=404, detail="Invalid Verification Code")
 
     background_task.add_task(
         send_mail,
