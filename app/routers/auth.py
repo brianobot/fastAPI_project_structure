@@ -12,7 +12,7 @@ from app.schemas import auth as auth_schemas
 from app.services import auth as auth_services
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings()  # type: ignore
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
