@@ -1,5 +1,6 @@
 import typing
 from typing import AsyncGenerator
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -15,7 +16,7 @@ if typing.TYPE_CHECKING:
     pass
 
 
-settings = Settings()
+settings = Settings()  # type: ignore
 
 # Uses an SQLITE In-memory DB for setting
 DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -42,6 +43,16 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(autouse=True)
 async def run_migrations():
     await setup_db()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_fastmail_send():
+    """
+    Globally patches FastMail.send_message for the entire test session.
+    """
+    # Use the string path to where FastMail is imported in your app
+    with patch("app.mailer.FastMail.send_message", new_callable=AsyncMock) as mock:
+        yield mock
 
 
 @pytest.fixture

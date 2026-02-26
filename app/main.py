@@ -16,7 +16,7 @@ from app.logger import logger
 from app.middlewares import log_request_middleware
 from app.settings import Settings
 
-settings = Settings()
+settings = Settings()  # type: ignore
 
 
 @asynccontextmanager
@@ -79,6 +79,18 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, __: Exception):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "detail": "This route does not exist",
+            "path": request.url.path,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unexpected error: {str(exc)}")
@@ -86,7 +98,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "detail": "An unexpected error occurred",
             "path": request.url.path,
+            "detail": "An unexpected error occurred",
         },
     )

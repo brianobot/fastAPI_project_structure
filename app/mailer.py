@@ -45,6 +45,8 @@ async def send_mail(
     try:
         await fm.send_message(message, template_name=template)
         logger.info("mail sent")
+        return True
 
     except ConnectionErrors as e:  # noqa
         logger.error(f"mail failed to send for {payload}, with subject: {subject}")
+        return False
