@@ -3,6 +3,7 @@ from httpx import ASGITransport, AsyncClient, Response
 
 from app.main import app
 from app.models import User as UserDB
+from app.redis_manager import redis_manager
 from app.schemas.auth import UserModel
 
 
@@ -63,7 +64,6 @@ async def sign_up_user(signup_data: dict):
 
 async def mutate_cache_item(key: str, value: dict):
     # to be used as a side effect to mutate cache item
-    from app.redis_manager import redis_manager
 
     redis_manager.cache_json_item(key, value)
 
@@ -78,15 +78,19 @@ async def test_initiate_password_reset(client: AsyncClient, signup_data: dict):
 
 
 async def test_verify_reset_password_otp(client: AsyncClient, user: UserDB):
-    await mutate_cache_item(f"reset-code-{user.email}", {"code": "0000"})
-    data = {"email": user.email, "code": "0000"}
-    response: Response = await client.post("/v1/auth/verify_password_reset", json=data)
+    # Seed the value to be validated against
+    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
+    verification_data = {"email": user.email, "code": "0000"}
+    response: Response = await client.post(
+        "/v1/auth/verify_password_reset", json=verification_data
+    )
     assert response.status_code == 200
-    assert response.json().get("detail") == "Code is Correct"
+    assert response.json().get("detail") == "Verification is Successful"
 
 
 async def test_reset_password(client: AsyncClient, user: UserDB):
-    await mutate_cache_item(f"reset-code-{user.email}", {"code": "0000"})
+    # Seed the value to be validated against
+    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
     data = {"new_password": "password", "email": user.email, "code": "0000"}
     response: Response = await client.post("/v1/auth/reset_password", json=data)
     assert response.status_code == 200
@@ -94,7 +98,8 @@ async def test_reset_password(client: AsyncClient, user: UserDB):
 
 
 async def test_reset_password_fails(client: AsyncClient, user: UserDB):
-    await mutate_cache_item(f"reset-code-{user.email}", {"code": "0000"})
+    # Seed the value to be validated against
+    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
     data = {"new_password": "password", "email": user.email, "code": "1111"}
     response: Response = await client.post("/v1/auth/reset_password", json=data)
     assert response.status_code == 400
@@ -146,7 +151,8 @@ async def test_logout(client: AsyncClient, auth_header: dict[str, str]):
 
 
 async def test_get_user_detail(
-    client: AsyncClient, user: UserDB, auth_header: dict[str, str]
+    client: AsyncClient,
+    auth_header: dict[str, str],
 ):
     response: Response = await client.get("/v1/auth/me", headers=auth_header)
     assert response.status_code == 200

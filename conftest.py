@@ -77,6 +77,7 @@ async def user(session: AsyncSession):
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    await session.flush()
     return user
 
 

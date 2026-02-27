@@ -12,8 +12,8 @@ async def log_request_middleware(request: Request, call_next):
     log_dict = {
         "url": request.url.path,
         "method": request.method,
-        "process_time": f"{(time.time() - start):.2f}s",
         "status_code": response.status_code,
+        "process_time": f"{(time.time() - start):.2f}s",
     }
 
     logger.info(log_dict)

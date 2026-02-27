@@ -2,7 +2,7 @@ name: Dependency Security Audit
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "dev" ]
 
 jobs:
   security-scan:

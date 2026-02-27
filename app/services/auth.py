@@ -159,7 +159,7 @@ async def verify_reset_password_otp(code: str, email: str, session: AsyncSession
     if not user:
         raise HTTPException(status_code=400, detail="Invalid Reset Code")
 
-    return {"detail": "Code is Correct"}
+    return {"detail": "Verification is Successful"}
 
 
 async def reset_password(

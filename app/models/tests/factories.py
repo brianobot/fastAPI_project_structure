@@ -9,10 +9,10 @@ faker = Faker()
 
 
 class UserFactory(factory.alchemy.SQLAlchemyModelFactory):
-    class Meta:
+    class Meta:  # type: ignore
         model = UserDB
         sqlalchemy_session_factory = TestingSessionLocal
         sqlalchemy_session_persistence = "commit"
 
-    email = faker.email().lower()
+    email = factory.Faker("email")  # type: ignore
     password = get_password_hash("password")

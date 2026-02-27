@@ -1,0 +1,17 @@
+name: Auto Merge PR
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Automatically Merge PR
+        uses: pascalgn/automerge-action@v0.16.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_PERSONAL_TOKEN }}
+          MERGE_METHOD: merge # or 'squash' or 'rebase'
+          MERGE_LABELS: ""
