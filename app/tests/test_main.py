@@ -65,7 +65,7 @@ async def test_trusted_host_middleware_denied():
 
 
 # Uncomment this to activate test after setting up CORS
-async def _test_cors_middleware_headers():
+async def _test_cors_middleware_headers():  # pragma: no cover
     # Change the value of the CORS url here to match your config
     headers = {"Origin": "http://localhost:3000"}
     async with AsyncClient(

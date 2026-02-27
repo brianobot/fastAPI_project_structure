@@ -301,19 +301,22 @@ async def signin_user(data: auth_schema.UserSignInData, session: AsyncSession):
 async def refresh_token(
     token_data: auth_schema.RefreshTokenModel, session: AsyncSession
 ):
-    payload = jwt.decode(
-        token_data.refresh_token, JWT_SECRET, algorithms=[JWT_ALGORITHM]
-    )
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
-    email = payload.get("sub")
-    if not email:
-        raise HTTPException(status_code=400, detail="Missing user ID in token")
+    try:
+        payload = jwt.decode(
+            token_data.refresh_token, JWT_SECRET, algorithms=[JWT_ALGORITHM]
+        )
+    except Exception:
+        logger.error("JWT Decode Failed!")
+        raise HTTPException(detail="Invalid Refresh Token", status_code=400)
 
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid Refresh Token")
+
+    email = payload.get("sub")
     user = await get_user(email, session)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Refresh Token"
         )
 
     new_access_token = create_access_token(data={"sub": email})

@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from faker import Faker
@@ -222,3 +223,87 @@ async def test_create_access_token(expires_delta: timedelta | None):
 )
 async def test_refresh_access_token(expires_delta: timedelta | None):
     auth_services.create_refresh_token({"sub": faker.email()}, expires_delta)
+
+
+async def test_authenticate_user(user: UserDB, session: AsyncSession):
+    result = await auth_services.authenticate_user(user.email, "password", session)
+    assert isinstance(result, UserDB)
+    assert result.id == user.id
+
+
+@pytest.mark.parametrize(
+    "email,password",
+    [
+        (faker.email(), "password"),
+        (faker.email(), "incorrectpassword"),
+    ],
+)
+async def test_authenticate_user_returns_none(
+    session: AsyncSession, email: str, password: str
+):
+    result = await auth_services.authenticate_user(email, password, session)
+    assert result is False
+
+
+async def test_signup_user(session: AsyncSession):
+    email = faker.email()
+    result = await auth_services.signup_user(
+        auth_schemas.UserSignUpData(email=email, password="password"),
+        session,
+        BackgroundTasks(tasks=[]),
+    )
+    assert isinstance(result, UserDB)
+    assert result.email == email
+
+
+async def test_signin_user(user: UserDB, session: AsyncSession):
+    result = await auth_services.signin_user(
+        auth_schemas.UserSignInData(email=user.email, password="password"), session
+    )
+    assert isinstance(result, auth_schemas.Token)
+
+
+async def test_signin_user_for_none_user(session: AsyncSession):
+    with pytest.raises(HTTPException) as err:
+        await auth_services.signin_user(
+            auth_schemas.UserSignInData(email=faker.email(), password="password"),
+            session,
+        )
+
+    assert err.value.detail == "Incorrect email or password"
+
+
+async def test_refresh_token(user: UserDB, session: AsyncSession):
+    initial_refresh_token = auth_services.create_refresh_token({"sub": user.email})
+    updated_refreshed_token = await auth_services.refresh_token(
+        auth_schemas.RefreshTokenModel(refresh_token=initial_refresh_token), session
+    )
+    assert updated_refreshed_token
+
+
+@pytest.mark.parametrize(
+    "email,error_message",
+    [(faker.email(), "Invalid Refresh Token"), (None, "Invalid Refresh Token")],
+)
+async def test_refresh_token_fails(
+    email: str | None, error_message: str, session: AsyncSession
+):
+    invalid_refresh_token = auth_services.create_refresh_token({"sub": email})  # type: ignore
+    with pytest.raises(HTTPException) as err:
+        await auth_services.refresh_token(
+            auth_schemas.RefreshTokenModel(refresh_token=invalid_refresh_token), session
+        )
+    assert err.value.detail == error_message
+
+
+async def test_refresh_token_payload_return_none(session: AsyncSession):
+    invalid_refresh_token = auth_services.create_refresh_token({"sub": faker.email()})  # type: ignore
+    with patch("app.services.auth.jwt.decode") as mock_decode:
+        mock_decode.return_value = None
+
+        with pytest.raises(HTTPException) as err:
+            await auth_services.refresh_token(
+                auth_schemas.RefreshTokenModel(refresh_token=invalid_refresh_token),
+                session,
+            )
+    assert err.value.detail == "Invalid Refresh Token"
