@@ -1,7 +1,6 @@
 import pytest
-from httpx import ASGITransport, AsyncClient, Response
+from httpx import AsyncClient, Response
 
-from app.main import app
 from app.models import User as UserDB
 from app.redis_manager import redis_manager
 from app.schemas.auth import UserModel
@@ -53,21 +52,6 @@ async def test_signup_fails(
     assert error_msg == error_message
 
 
-@pytest.fixture
-async def sign_up_user(signup_data: dict):
-    # to be used as a side effect to test things that need a user that has signed up
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        await client.post("/v1/auth/signup", json=signup_data)
-
-
-async def mutate_cache_item(key: str, value: dict):
-    # to be used as a side effect to mutate cache item
-
-    redis_manager.cache_json_item(key, value)
-
-
 async def test_initiate_password_reset(client: AsyncClient, signup_data: dict):
     data = {"email": signup_data["email"]}
     response: Response = await client.post(
@@ -106,19 +90,51 @@ async def test_reset_password_fails(client: AsyncClient, user: UserDB):
     assert response.json().get("detail") == "Invalid Reset Code"
 
 
-async def test_signin(client: AsyncClient, user: UserDB):
-    data = {
-        "username": user.email,
-        "password": "password",
-    }
-    response: Response = await client.post("/v1/auth/token", data=data)
-    assert response.status_code == 200
-    response_data = response.json()
-    assert "token_type" in response_data
-    assert "access_token" in response_data
-    assert "refresh_token" in response_data
-    assert "access_expires_at" in response_data
-    assert "refresh_expires_at" in response_data
+class TestSignIn:
+    async def test_signin_success(self, client: AsyncClient, user: UserDB):
+        data = {
+            "username": user.email,
+            "password": "password",
+        }
+        response = await client.post("/v1/auth/token", data=data)
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "access_token" in response_data
+        assert "token_type" in response_data
+        assert "refresh_token" in response_data
+        assert "access_expires_at" in response_data
+        assert "refresh_expires_at" in response_data
+        assert response_data["token_type"] == "Bearer"
+
+    async def test_signin_validation_error(self, client: AsyncClient):
+        # Pass a string that is NOT a valid email
+        data = {
+            "username": "not-an-email",
+            "password": "password",
+        }
+        response = await client.post("/v1/auth/token", data=data)
+
+        assert response.status_code == 422
+        assert "detail" in response.json()
+
+    async def test_signin_invalid_password(self, client: AsyncClient, user: UserDB):
+        data = {
+            "username": user.email,
+            "password": "wrong-password",
+        }
+        response = await client.post("/v1/auth/token", data=data)
+
+        # auth_services likely raises 401 for wrong passwords
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Incorrect email or password"
+
+    async def test_signin_user_not_found(self, client: AsyncClient):
+        data = {
+            "username": "ghost@example.com",
+            "password": "password",
+        }
+        response = await client.post("/v1/auth/token", data=data)
+        assert response.status_code == 401
 
 
 async def test_get_refresh_token(client: AsyncClient, user: UserDB):

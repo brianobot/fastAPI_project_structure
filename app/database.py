@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.settings import Settings
 
-settings = Settings()  # noqa
+settings = Settings()  # type: ignore
 
 # Add Support for Both ASYNC and SYNC Database URLs
 # With Async being the center of focus

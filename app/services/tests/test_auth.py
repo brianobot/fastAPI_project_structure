@@ -1,5 +1,8 @@
+from typing import Any
+
+import pytest
 from faker import Faker
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User as UserDB
@@ -32,7 +35,17 @@ async def test_create_user(session: AsyncSession, signup_data: dict[str, str]): 
     assert isinstance(result, UserDB)
 
 
-async def test_verify_user(user: UserDB, session: AsyncSession):
+async def test_create_user_fails(
+    session: AsyncSession, signup_data: dict[str, Any], user: UserDB  # noqa
+):  # noqa
+    signup_data["email"] = user.email
+    with pytest.raises(HTTPException) as err:
+        await auth_services.create_user(UserSignUpData(**signup_data), session)
+
+    assert "Email already registered" in str(err.value)
+
+
+async def test_verify_user_succeeds(user: UserDB, session: AsyncSession):
     verification_data = auth_schemas.UserVerificationModel(
         email=user.email, code="000000"
     )
@@ -45,3 +58,31 @@ async def test_verify_user(user: UserDB, session: AsyncSession):
         session,
     )
     # test that the flag for verified user is activated
+
+
+@pytest.mark.parametrize(
+    "verification_data,cached_code",
+    [
+        ({"email": faker.email(), "code": "000000"}, {"code": "000000"}),
+        ({"email": faker.email(), "code": "000000"}, {"code": "000001"}),
+        ({"email": faker.email(), "code": "000000"}, None),
+    ],
+)
+async def test_verify_user_fails(
+    user: UserDB,
+    session: AsyncSession,
+    verification_data: dict[str, str],
+    cached_code: dict[str, str] | None,
+):
+    data = auth_schemas.UserVerificationModel(**verification_data)
+    redis_manager.cache_json_item(
+        f"verification-code-{data.email}", cached_code  # type: ignore
+    )
+    with pytest.raises(HTTPException) as err:
+        await auth_services.verify_user(
+            data,
+            BackgroundTasks(tasks=[]),
+            session,
+        )
+
+    assert err.value.detail == "Invalid Verification Code"
