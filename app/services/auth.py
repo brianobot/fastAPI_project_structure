@@ -81,7 +81,7 @@ async def verify_user(
         logger.info(f"Corrupt Log Data: {data}")
         raise HTTPException(status_code=404, detail="Invalid Verification Code")
 
-    if not data or data.get("code") != verification_data.code:
+    if data.get("code") != verification_data.code:
         logger.info("Invalid Verification Code")
         raise HTTPException(status_code=400, detail="Invalid Verification Code")
 
@@ -143,7 +143,7 @@ async def initiate_password_reset(
         send_mail,
         subject="Password Reset",
         receipients=[user.email],
-        payload={"username": user.username.title(), "code": code},
+        payload={"username": user.email.split("@")[0], "code": code},
         template="auth/initiate_password_reset.html",
     )
 
