@@ -171,7 +171,7 @@ async def reset_password(
 
     user = await get_user(reset_data.email, session)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Invalid Reset Code")
 
     hashed_password = get_password_hash(reset_data.new_password)
     stmt = (
@@ -201,7 +201,7 @@ async def update_user(
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail="Incorrect Old Password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         data.update({"password": get_password_hash(new_password)})
@@ -218,7 +218,9 @@ async def update_user(
     return result.scalar_one()
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+def create_access_token(
+    data: dict[str, str | datetime], expires_delta: timedelta | None = None
+):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta
@@ -229,7 +231,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 
-def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
+def create_refresh_token(
+    data: dict[str, str | datetime], expires_delta: timedelta | None = None
+):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta

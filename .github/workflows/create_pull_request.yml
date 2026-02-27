@@ -42,6 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest # Ensures pytest is available even if not in requirements.txt
+          pip install pytest pytest-cov
 
       - name: Create .env file
         run: |
@@ -55,11 +56,26 @@ jobs:
           echo "MAIL_PORT=465" >> .env
           echo "MAIL_SERVER=smtp.gmail.com" >> .env
 
-
       - name: Run Tests
+        id: coverage_step
         run: |
           mkdir logs
-          pytest -s
+          coverage run -m pytest
+          PERCENT=$(coverage report | grep TOTAL | awk '{print $NF}' | sed 's/%//')
+          echo "PERCENTAGE=$PERCENT" >> $GITHUB_OUTPUT
+
+      - name: Create Coverage Badge
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: b56b3d61a5e739fd26252cda094bace2
+          filename: fastapi_project_structure_coverage.json
+          label: Coverage
+          message: ${{ steps.coverage_step.outputs.PERCENTAGE }}%
+          valColorRange: ${{ steps.coverage_step.outputs.PERCENTAGE }}
+          maxColorRange: 100
+          minColorRange: 0
+
 
   create_pull_request:
       runs-on: ubuntu-latest
