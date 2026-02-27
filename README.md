@@ -1,6 +1,9 @@
 # FastAPI Project Structure Template
 ⚙️ You can Generate Project Interactively Based on this template with the [FastAPI Gen8 CLI Tool](https://pypi.org/project/fastapi-gen8/)
 
+
+![Coverage Badge](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/brianobot/b56b3d61a5e739fd26252cda094bace2/raw/fastapi_project_structure_coverage.json)
+
 [📖 Read Article here](https://medium.com/@brianobot9/the-ultimate-fastapi-project-blueprint-build-scalable-secure-and-maintainable-systems-with-ease-acbc4e058012)
 
 This repository provides a clean and scalable template for building FastAPI applications. It is designed to help you start new projects quickly with best practices in mind.

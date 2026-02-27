@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -109,11 +110,9 @@ async def test_initiate_password_reset_for_user(user: UserDB, session: AsyncSess
     assert result == {"detail": "Password reset code sent"}
 
 
-async def test_initiate_password_reset_for_none_user(
-    user: UserDB, session: AsyncSession
-):
+async def test_initiate_password_reset_for_none_user(session: AsyncSession):
     result = await auth_services.initiate_password_reset(
-        user.email, session, BackgroundTasks(tasks=[])
+        faker.email(), session, BackgroundTasks(tasks=[])
     )
     assert result == {"detail": "Password reset code sent"}
 
@@ -133,14 +132,19 @@ async def test_verify_reset_password_otp_for_user(user: UserDB, session: AsyncSe
     ],
 )
 async def test_verify_reset_password_otp_fails(session: AsyncSession, code: str):
-    redis_manager.cache_json_item(f"reset-code-{faker.email()}", {"code": "000000"})
+    none_existence_email = faker.email()
+    redis_manager.cache_json_item(
+        f"reset-code-{none_existence_email}", {"code": "000000"}
+    )
     with pytest.raises(HTTPException) as err:
-        await auth_services.verify_reset_password_otp(code, faker.email(), session)
+        await auth_services.verify_reset_password_otp(
+            code, none_existence_email, session
+        )
 
     assert err.value.detail == "Invalid Reset Code"
 
 
-async def test_reset_password(user: UserDB, session: AsyncSession):
+async def test_reset_password_for_user(user: UserDB, session: AsyncSession):
     redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
     result = await auth_services.reset_password(
         auth_schemas.PasswordResetData(
@@ -149,3 +153,72 @@ async def test_reset_password(user: UserDB, session: AsyncSession):
         session,
     )
     assert result == {"detail": "Password reset successfully"}
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "000000",
+        "000001",
+    ],
+)
+async def test_reset_password_fails(user: UserDB, session: AsyncSession, code: str):
+    none_existence_email = faker.email()
+    redis_manager.cache_json_item(
+        f"reset-code-{none_existence_email}", {"code": "000000"}
+    )
+    with pytest.raises(HTTPException) as err:
+        await auth_services.reset_password(
+            auth_schemas.PasswordResetData(
+                code=code, email=none_existence_email, new_password="newpassword"
+            ),
+            session,
+        )
+
+    assert err.value.detail == "Invalid Reset Code"
+
+
+async def test_update_user(user: UserDB, session: AsyncSession):
+    updated_user = await auth_services.update_user(
+        user.email,
+        auth_schemas.UpdateUserModel(
+            old_password="password", new_password="new_password"
+        ),
+        session,
+    )
+    assert isinstance(updated_user, UserDB)
+    assert auth_services.verify_password("new_password", updated_user.password)
+
+
+async def test_update_user_fails(user: UserDB, session: AsyncSession):
+    with pytest.raises(HTTPException) as err:
+        await auth_services.update_user(
+            user.email,
+            auth_schemas.UpdateUserModel(
+                old_password="incorrectpassword", new_password="new_password"
+            ),
+            session,
+        )
+    assert err.value.detail == "Incorrect Old Password"
+
+
+@pytest.mark.parametrize(
+    "expires_delta",
+    [
+        None,
+        timedelta(days=10),
+    ],
+)
+async def test_create_access_token(expires_delta: timedelta | None):
+    auth_services.create_access_token({"sub": faker.email()}, expires_delta)
+
+
+@pytest.mark.parametrize(
+    "expires_delta",
+    [
+        None,
+        timedelta(days=10),
+    ],
+)
+async def test_refresh_access_token(expires_delta: timedelta | None):
+    auth_services.create_refresh_token({"sub": faker.email()}, expires_delta)
