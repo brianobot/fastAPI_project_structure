@@ -86,3 +86,66 @@ async def test_verify_user_fails(
         )
 
     assert err.value.detail == "Invalid Verification Code"
+
+
+async def test_resend_verification_code_for_user(user: UserDB, session: AsyncSession):
+    result = await auth_services.resend_verification_code(
+        user.email, session, BackgroundTasks(tasks=[])
+    )
+    assert result == {"detail": "Verification code resent"}
+
+
+async def test_resend_verification_code_for_none_user(session: AsyncSession):
+    result = await auth_services.resend_verification_code(
+        faker.email(), session, BackgroundTasks(tasks=[])
+    )
+    assert result == {"detail": "Verification code resent"}
+
+
+async def test_initiate_password_reset_for_user(user: UserDB, session: AsyncSession):
+    result = await auth_services.initiate_password_reset(
+        user.email, session, BackgroundTasks(tasks=[])
+    )
+    assert result == {"detail": "Password reset code sent"}
+
+
+async def test_initiate_password_reset_for_none_user(
+    user: UserDB, session: AsyncSession
+):
+    result = await auth_services.initiate_password_reset(
+        user.email, session, BackgroundTasks(tasks=[])
+    )
+    assert result == {"detail": "Password reset code sent"}
+
+
+async def test_verify_reset_password_otp_for_user(user: UserDB, session: AsyncSession):
+    code = "000000"
+    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": code})
+    result = await auth_services.verify_reset_password_otp(code, user.email, session)
+    assert result == {"detail": "Verification is Successful"}
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "000001",
+        "000000",
+    ],
+)
+async def test_verify_reset_password_otp_fails(session: AsyncSession, code: str):
+    redis_manager.cache_json_item(f"reset-code-{faker.email()}", {"code": "000000"})
+    with pytest.raises(HTTPException) as err:
+        await auth_services.verify_reset_password_otp(code, faker.email(), session)
+
+    assert err.value.detail == "Invalid Reset Code"
+
+
+async def test_reset_password(user: UserDB, session: AsyncSession):
+    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+    result = await auth_services.reset_password(
+        auth_schemas.PasswordResetData(
+            code="000000", email=user.email, new_password="newpassword"
+        ),
+        session,
+    )
+    assert result == {"detail": "Password reset successfully"}
