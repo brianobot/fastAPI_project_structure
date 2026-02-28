@@ -10,8 +10,8 @@ faker = faker.Faker()
 @pytest.fixture
 async def signup_data() -> dict[str, str]:
     return {
-        "email": faker.email(),
-        "password": faker.password(length=8),
+        "email": faker.email(),  # type: ignore
+        "password": faker.password(length=8),  # type: ignore
     }
 
 
