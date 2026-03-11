@@ -14,5 +14,5 @@ class UserFactory(factory.alchemy.SQLAlchemyModelFactory):
         sqlalchemy_session_factory = TestingSessionLocal
         sqlalchemy_session_persistence = "commit"
 
-    email = factory.Faker("email")  # type: ignore
+    email = factory.faker.Faker("email")
     password = get_password_hash("password")
