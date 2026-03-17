@@ -3,6 +3,7 @@ from httpx import AsyncClient, Response
 
 from app.models import User as UserDB
 from app.redis_manager import redis_manager
+from app.schemas import auth as auth_schemas
 from app.schemas.auth import UserModel
 
 
@@ -98,13 +99,7 @@ class TestSignIn:
         }
         response = await client.post("/v1/auth/token", data=data)
         assert response.status_code == 200
-        response_data = response.json()
-        assert "access_token" in response_data
-        assert "token_type" in response_data
-        assert "refresh_token" in response_data
-        assert "access_expires_at" in response_data
-        assert "refresh_expires_at" in response_data
-        assert response_data["token_type"] == "Bearer"
+        assert auth_schemas.Token.model_validate(response.json())
 
     async def test_signin_validation_error(self, client: AsyncClient):
         # Pass a string that is NOT a valid email
@@ -147,12 +142,7 @@ async def test_get_refresh_token(client: AsyncClient, user: UserDB):
     data = {"refresh_token": refresh_token}
     response: Response = await client.post("/v1/auth/refresh_token", json=data)
     assert response.status_code == 200
-    response_data = response.json()
-    assert "token_type" in response_data
-    assert "access_token" in response_data
-    assert "refresh_token" in response_data
-    assert "access_expires_at" in response_data
-    assert "refresh_expires_at" in response_data
+    assert auth_schemas.Token.model_validate(response.json())
 
 
 async def test_logout(client: AsyncClient, auth_header: dict[str, str]):
