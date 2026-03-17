@@ -7,7 +7,7 @@ import jwt
 from fastapi import BackgroundTasks, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic.networks import EmailStr
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logger import logger
@@ -43,7 +43,7 @@ def get_password_hash(password: str):
 
 
 async def get_user(email: EmailStr, session: AsyncSession) -> UserDB | None:
-    stmt = select(UserDB).where(UserDB.email == email)
+    stmt = select(UserDB).where(func.lower(UserDB.email) == email.lower())
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
