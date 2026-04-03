@@ -13,7 +13,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api_router import api
 from app.logger import logger
-from app.middlewares import log_request_middleware
+from app.middlewares import AllowAuthorizedDocAccess, log_request_middleware
 from app.settings import Settings
 
 settings = Settings()  # type: ignore
@@ -55,6 +55,7 @@ def initiate_app():
             # Add allowed hosts here
         ],
     )
+    app.add_middleware(AllowAuthorizedDocAccess)
     app.add_middleware(BaseHTTPMiddleware, dispatch=log_request_middleware)
 
     limiter = Limiter(key_func=get_remote_address)
