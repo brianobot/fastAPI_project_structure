@@ -76,7 +76,6 @@ jobs:
           maxColorRange: 100
           minColorRange: 0
 
-
   create_pull_request:
       runs-on: ubuntu-latest
       needs: test  # This creates the dependency link
