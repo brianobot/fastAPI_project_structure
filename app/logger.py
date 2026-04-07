@@ -1,8 +1,12 @@
 import json
 import logging
+import os
 from logging.handlers import TimedRotatingFileHandler
 
 logger = logging.getLogger()
+
+LOG_FILE = "logs/app.log"
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 
 class JsonFormatter(logging.Formatter):
@@ -19,7 +23,7 @@ class JsonFormatter(logging.Formatter):
 
 
 file_handler = TimedRotatingFileHandler(
-    "logs/app.log",
+    LOG_FILE,
     when="midnight",
     interval=1 // 86400,
     backupCount=7,
