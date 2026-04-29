@@ -27,9 +27,18 @@ CurrentUserDep = Annotated[UserDB, Depends(get_current_user)]
 async def signup(
     db: DBDep,
     bg_task: BackgroundTasks,  # needed to send verification/welcome email
-    request_data: auth_schemas.UserSignUpData,
+    payload: auth_schemas.UserSignUpData,
 ):
-    return await auth_services.signup_user(request_data, db, bg_task)
+    return await auth_services.signup_user(payload, db, bg_task)
+
+
+@router.post("/activation")
+async def activate_user(
+    db: DBDep,
+    bg_task: BackgroundTasks,  # needed to send verification/welcome email
+    payload: auth_schemas.UserVerificationModel,
+):
+    return await auth_services.activate_user(payload, db, bg_task)
 
 
 @router.post("/initiate_password_reset")
@@ -39,13 +48,6 @@ async def initiate_password_reset(
     background_task: BackgroundTasks,
 ):
     return await auth_services.initiate_password_reset(email, db, background_task)
-
-
-@router.post("/verify_password_reset")
-async def verify_reset_password_otp(
-    db: DBDep, code: Annotated[str, Body(embed=True)], email: EmailBody
-):
-    return await auth_services.verify_reset_password_otp(code, email, db)
 
 
 @router.post("/reset_password")

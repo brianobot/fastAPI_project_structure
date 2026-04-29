@@ -108,41 +108,14 @@ async def test_initiate_password_reset_for_user(user: UserDB, session: AsyncSess
     result = await auth_services.initiate_password_reset(
         user.email, session, BackgroundTasks(tasks=[])
     )
-    assert result == {"detail": "Password reset code sent"}
+    assert result == {"detail": "Password Reset Code Sent"}
 
 
 async def test_initiate_password_reset_for_none_user(session: AsyncSession):
     result = await auth_services.initiate_password_reset(
         faker.email(), session, BackgroundTasks(tasks=[])
     )
-    assert result == {"detail": "Password reset code sent"}
-
-
-async def test_verify_reset_password_otp_for_user(user: UserDB, session: AsyncSession):
-    code = "000000"
-    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": code})
-    result = await auth_services.verify_reset_password_otp(code, user.email, session)
-    assert result == {"detail": "Verification is Successful"}
-
-
-@pytest.mark.parametrize(
-    "code",
-    [
-        "000001",
-        "000000",
-    ],
-)
-async def test_verify_reset_password_otp_fails(session: AsyncSession, code: str):
-    none_existence_email = faker.email()
-    redis_manager.cache_json_item(
-        f"reset-code-{none_existence_email}", {"code": "000000"}
-    )
-    with pytest.raises(HTTPException) as err:
-        await auth_services.verify_reset_password_otp(
-            code, none_existence_email, session
-        )
-
-    assert err.value.detail == "Invalid Reset Code"
+    assert result == {"detail": "Password Reset Code Sent"}
 
 
 async def test_reset_password_for_user(user: UserDB, session: AsyncSession):
@@ -153,7 +126,7 @@ async def test_reset_password_for_user(user: UserDB, session: AsyncSession):
         ),
         session,
     )
-    assert result == {"detail": "Password reset successfully"}
+    assert result == {"detail": "Password Reset Successfully"}
 
 
 @pytest.mark.parametrize(
