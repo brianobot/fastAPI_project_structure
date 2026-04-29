@@ -53,33 +53,31 @@ async def test_signup_fails(
     assert error_msg == error_message
 
 
+async def test_activate_user(client: AsyncClient, user: UserDB):
+    redis_manager.cache_json_item(f"verification-code-{user.email}", {"code": "000000"})
+    response: Response = await client.post(
+        "/v1/auth/activation", json={"code": "000000", "email": user.email}
+    )
+    assert response.status_code == 200
+    assert response.json().get("detail") == "Email Activation Successful"
+
+
 async def test_initiate_password_reset(client: AsyncClient, signup_data: dict):
     data = {"email": signup_data["email"]}
     response: Response = await client.post(
         "/v1/auth/initiate_password_reset", json=data
     )
     assert response.status_code == 200
-    assert response.json().get("detail") == "Password reset code sent"
-
-
-async def test_verify_reset_password_otp(client: AsyncClient, user: UserDB):
-    # Seed the value to be validated against
-    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
-    verification_data = {"email": user.email, "code": "0000"}
-    response: Response = await client.post(
-        "/v1/auth/verify_password_reset", json=verification_data
-    )
-    assert response.status_code == 200
-    assert response.json().get("detail") == "Verification is Successful"
+    assert response.json().get("detail") == "Password Reset Code Sent"
 
 
 async def test_reset_password(client: AsyncClient, user: UserDB):
     # Seed the value to be validated against
-    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
-    data = {"new_password": "password", "email": user.email, "code": "0000"}
+    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+    data = {"new_password": "password", "email": user.email, "code": "000000"}
     response: Response = await client.post("/v1/auth/reset_password", json=data)
     assert response.status_code == 200
-    assert response.json().get("detail") == "Password reset successfully"
+    assert response.json().get("detail") == "Password Reset Successfully"
 
 
 async def test_reset_password_fails(client: AsyncClient, user: UserDB):

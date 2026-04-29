@@ -31,6 +31,7 @@ class AllowAuthorizedDocAccess(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         client_ip = request.client.host  # type: ignore
+
         if "/docs" in request.url.path:
             if client_ip not in self.allowed_ips:
                 return JSONResponse(

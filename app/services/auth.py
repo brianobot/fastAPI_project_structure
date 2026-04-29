@@ -132,7 +132,7 @@ async def initiate_password_reset(
 ):
     user = await get_user(email, session)
     if not user:
-        return {"detail": "Password reset code sent"}
+        return {"detail": "Password Reset Code Sent"}
 
     code = str(randint(1000, 9999))
     redis_manager.cache_json_item(
@@ -147,19 +147,7 @@ async def initiate_password_reset(
         template="auth/initiate_password_reset.html",
     )
 
-    return {"detail": "Password reset code sent"}
-
-
-async def verify_reset_password_otp(code: str, email: str, session: AsyncSession):
-    data = redis_manager.get_json_item(f"reset-code-{email}")
-    if not data or data.get("code") != code:
-        raise HTTPException(status_code=400, detail="Invalid Reset Code")
-
-    user = await get_user(email, session)
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid Reset Code")
-
-    return {"detail": "Verification is Successful"}
+    return {"detail": "Password Reset Code Sent"}
 
 
 async def reset_password(
@@ -184,7 +172,7 @@ async def reset_password(
     await session.execute(stmt)
     await session.commit()
 
-    return {"detail": "Password reset successfully"}
+    return {"detail": "Password Reset Successfully"}
 
 
 async def update_user(
@@ -262,14 +250,34 @@ async def signup_user(
 ):
     user = await create_user(data, session)
 
-    background_task.add_task(
+    return user
+
+
+async def activate_user(
+    verification_data: auth_schema.UserVerificationModel,
+    session: AsyncSession,
+    bg_task: BackgroundTasks,
+):
+    data = redis_manager.get_json_item(f"verification-code-{verification_data.email}")
+
+    if not data or data.get("code") != verification_data.code:
+        raise HTTPException(status_code=400, detail="Invalid Reset Code")
+
+    user = await get_user(verification_data.email, session)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid Reset Code")
+
+    # TODO: Perform the actual user verification here
+
+    bg_task.add_task(
         send_mail,
         subject="Welcome to {{ project_name }}",
         receipients=[user.email],
         payload={"username": user.email.split("@")[0].title()},
         template="auth/welcome.html",
     )
-    return user
+
+    return {"detail": "Email Activation Successful"}
 
 
 async def signin_user(data: auth_schema.UserSignInData, session: AsyncSession):
