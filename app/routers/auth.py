@@ -41,6 +41,15 @@ async def activate_user(
     return await auth_services.activate_user(payload, db, bg_task)
 
 
+@router.post("/resend_activation")
+async def resend_activation_code(
+    db: DBDep,
+    email: EmailBody,
+    bg_task: BackgroundTasks,  # needed to send verification/welcome email
+):
+    return await auth_services.resend_activation_code(email, bg_task, db)
+
+
 @router.post("/initiate_password_reset")
 async def initiate_password_reset(
     db: DBDep,

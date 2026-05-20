@@ -54,12 +54,23 @@ async def test_signup_fails(
 
 
 async def test_activate_user(client: AsyncClient, user: UserDB):
-    redis_manager.cache_json_item(f"verification-code-{user.email}", {"code": "000000"})
+    redis_manager.cache_json_item(f"activation-code-{user.email}", {"code": "000000"})
     response: Response = await client.post(
         "/v1/auth/activation", json={"code": "000000", "email": user.email}
     )
+
     assert response.status_code == 200
     assert response.json().get("detail") == "Email Activation Successful"
+
+
+async def test_resend_activation_code(client: AsyncClient, user: UserDB):
+    redis_manager.cache_json_item(f"activation-code-{user.email}", {"code": "000000"})
+    response: Response = await client.post(
+        "/v1/auth/resend_activation", json={"email": user.email}
+    )
+
+    assert response.status_code == 200
+    assert response.json().get("detail") == "Activation Code Sent"
 
 
 async def test_initiate_password_reset(client: AsyncClient, signup_data: dict):
