@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from random import randint
+from random import choices
 from typing import Literal, cast
 
 import bcrypt
@@ -42,6 +42,11 @@ def get_password_hash(password: str):
     ).decode()
 
 
+def generate_random_code(n: int = 4) -> str:
+    code = choices("0123456789", k=n)
+    return "".join(code)
+
+
 async def get_user(email: EmailStr, session: AsyncSession) -> UserDB | None:
     stmt = select(UserDB).where(func.lower(UserDB.email) == email.lower())
     result = await session.execute(stmt)
@@ -59,7 +64,7 @@ async def create_user(
     hashed_password = get_password_hash(user_data.password)
     new_user = UserDB(
         email=user_data.email,
-        password=hashed_password,
+        password_hash=hashed_password,
     )
 
     session.add(new_user)
@@ -110,7 +115,7 @@ async def resend_verification_code(
         logger.warning(f"Email Verification Requested for invalid user {email}")
         return {"detail": "Verification code resent"}
 
-    code = str(randint(1000, 9999))
+    code = generate_random_code(4)
     redis_manager.cache_json_item(
         key=f"verification-code-{email}", value={"code": code}
     )
@@ -134,10 +139,8 @@ async def initiate_password_reset(
     if not user:
         return {"detail": "Password Reset Code Sent"}
 
-    code = str(randint(1000, 9999))
-    redis_manager.cache_json_item(
-        key=f"reset-code-{email}", value={"code": code, "email": email}, ttl=60 * 30
-    )
+    code = generate_random_code(6)
+    redis_manager.cache_json_item(f"reset-code-{email}", {"code": code}, ttl=60 * 30)
 
     background_task.add_task(
         send_mail,
@@ -165,7 +168,7 @@ async def reset_password(
     stmt = (
         update(UserDB)
         .where(UserDB.email == reset_data.email)
-        .values(password=hashed_password)
+        .values(password_hash=hashed_password)
         .execution_options(synchronize_session="fetch")
     )
 
@@ -184,7 +187,11 @@ async def update_user(
     new_password: str | None = data.pop("new_password", None)
     if new_password:
         user = await authenticate_user(
-            username=email, password=cast(str, old_password), session=session
+            username=email,
+            # NOTE: This can not fail since there's a validation on pydantic model to ensure old_password
+            # is passed when the new_passowrd field is passed too
+            password=cast(str, old_password),
+            session=session,
         )
         if not user:
             raise HTTPException(
@@ -192,7 +199,7 @@ async def update_user(
                 detail="Incorrect Old Password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        data.update({"password": get_password_hash(new_password)})
+        data.update({"password_hash": get_password_hash(new_password)})
 
     stmt = (
         update(UserDB)
@@ -238,7 +245,7 @@ async def authenticate_user(
     user: UserDB | None = await get_user(username, session)
     if not user:
         return False
-    if not verify_password(password, user.password):
+    if not verify_password(password, user.password_hash):
         return False
     return user
 
@@ -246,11 +253,47 @@ async def authenticate_user(
 async def signup_user(
     data: auth_schema.UserSignUpData,
     session: AsyncSession,
-    background_task: BackgroundTasks,
+    bg_task: BackgroundTasks,
 ):
     user = await create_user(data, session)
 
+    # TODO: Send Activation Code Email here too
+    code = generate_random_code(6)
+    redis_manager.cache_json_item(
+        f"activation-code-{data.email}", {"code": code}, ttl=60 * 30
+    )
+
+    bg_task.add_task(
+        send_mail,
+        subject="Activation Code",
+        receipients=[user.email],
+        payload={"username": user.email.split("@")[0], "code": code},
+        template="auth/verification.html",
+    )
     return user
+
+
+async def resend_activation_code(
+    email: str, bg_task: BackgroundTasks, session: AsyncSession
+):
+    user = await get_user(email, session)
+
+    if not user:
+        return {"detail": "Activation Code Sent"}
+
+    code = generate_random_code(6)
+    redis_manager.cache_json_item(
+        f"activation-code-{email}", {"code": code}, ttl=60 * 30
+    )
+
+    bg_task.add_task(
+        send_mail,
+        subject="Activation Code",
+        receipients=[user.email],
+        payload={"username": user.email.split("@")[0], "code": code},
+        template="auth/verification.html",
+    )
+    return {"detail": "Activation Code Sent"}
 
 
 async def activate_user(
@@ -258,7 +301,7 @@ async def activate_user(
     session: AsyncSession,
     bg_task: BackgroundTasks,
 ):
-    data = redis_manager.get_json_item(f"verification-code-{verification_data.email}")
+    data = redis_manager.get_json_item(f"activation-code-{verification_data.email}")
 
     if not data or data.get("code") != verification_data.code:
         raise HTTPException(status_code=400, detail="Invalid Reset Code")

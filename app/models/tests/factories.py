@@ -15,4 +15,4 @@ class UserFactory(factory.alchemy.SQLAlchemyModelFactory):
         sqlalchemy_session_persistence = "commit"
 
     email = factory.faker.Faker("email")
-    password = get_password_hash("password")
+    password_hash = get_password_hash("password")

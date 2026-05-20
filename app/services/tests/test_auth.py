@@ -161,7 +161,7 @@ async def test_update_user(user: UserDB, session: AsyncSession):
         session,
     )
     assert isinstance(updated_user, UserDB)
-    assert auth_services.verify_password("new_password", updated_user.password)
+    assert auth_services.verify_password("new_password", updated_user.password_hash)
 
 
 async def test_update_user_fails(user: UserDB, session: AsyncSession):
@@ -227,6 +227,63 @@ async def test_signup_user(session: AsyncSession):
     )
     assert isinstance(result, UserDB)
     assert result.email == email
+
+
+@pytest.mark.parametrize(
+    "code,response_message",
+    [
+        ("111111", "Invalid Reset Code"),
+        ("000000", "Email Activation Successful"),
+    ],
+)
+async def test_activate_user(
+    user: UserDB, session: AsyncSession, code: str, response_message: str
+):
+    redis_manager.cache_json_item(f"activation-code-{user.email}", {"code": "000000"})
+    if code != "000000":
+        with pytest.raises(HTTPException) as err:
+            result = await auth_services.activate_user(
+                auth_schemas.UserVerificationModel(
+                    email=user.email,
+                    code=code,
+                ),
+                session,
+                BackgroundTasks(),
+            )
+        assert err.value.detail == response_message
+
+        await session.delete(user)
+        await session.commit()
+
+        with pytest.raises(HTTPException) as err:
+            result = await auth_services.activate_user(
+                auth_schemas.UserVerificationModel(
+                    email=user.email,
+                    code=code,
+                ),
+                session,
+                BackgroundTasks(),
+            )
+        assert err.value.detail == response_message
+
+    else:
+        result = await auth_services.activate_user(
+            auth_schemas.UserVerificationModel(
+                email=user.email,
+                code=code,
+            ),
+            session,
+            BackgroundTasks(),
+        )
+
+        assert result == {"detail": response_message}
+
+
+async def test_resend_activation_code(user: UserDB, session: AsyncSession):
+    result = await auth_services.resend_activation_code(
+        user.email, BackgroundTasks(), session
+    )
+    assert result == {"detail": "Activation Code Sent"}
 
 
 async def test_signin_user(user: UserDB, session: AsyncSession):

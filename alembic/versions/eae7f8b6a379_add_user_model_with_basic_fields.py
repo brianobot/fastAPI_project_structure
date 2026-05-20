@@ -1,8 +1,8 @@
-"""Add Basic User Model
+"""Add User Model with basic fields
 
-Revision ID: c7bf14d1de71
+Revision ID: eae7f8b6a379
 Revises:
-Create Date: 2025-11-28 11:24:40.924617
+Create Date: 2026-05-20 09:39:09.338525
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op  # type: ignore
 
 # revision identifiers, used by Alembic.
-revision: str = "c7bf14d1de71"
+revision: str = "eae7f8b6a379"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,7 +24,8 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("email", sa.String(), nullable=False),
-        sa.Column("password", sa.String(), nullable=False),
+        sa.Column("password_hash", sa.String(), nullable=False),
+        sa.Column("is_verified", sa.Boolean(), nullable=False),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
             "date_created",
