@@ -6,21 +6,48 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api_router import api
+from app.database import AsyncSessionLocal
+from app.limiter import limiter
 from app.logger import logger
 from app.middlewares import AllowAuthorizedDocAccess, log_request_middleware
-from app.settings import Settings
+from app.redis_manager import redis_manager
+from app.routers.health import router as health_router
+from app.settings import settings
 
-settings = Settings()  # type: ignore
+
+async def check_connectivity() -> None:
+    """Fail fast (in production) if the DB or Redis is unreachable at startup."""
+    problems = []
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"database ({exc})")
+    try:
+        await redis_manager.redis_client.ping()
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"redis ({exc})")
+
+    if problems:
+        message = "Startup connectivity check failed: " + ", ".join(problems)
+        logger.error(message)
+        # In DEBUG (local/dev) log and continue; in production refuse to start.
+        if not settings.DEBUG:
+            raise RuntimeError(message)
+    else:
+        logger.info("Startup connectivity check passed (database, redis)")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await check_connectivity()
     yield
 
 
@@ -58,10 +85,12 @@ def initiate_app():
     app.add_middleware(AllowAuthorizedDocAccess)
     app.add_middleware(BaseHTTPMiddleware, dispatch=log_request_middleware)
 
-    limiter = Limiter(key_func=get_remote_address)
+    # Enforce the rate limits declared via @limiter.limit(...) on the routes.
     app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
     app.include_router(api)
+    app.include_router(health_router)
     return app
 
 

@@ -1,11 +1,9 @@
 import json
 from typing import Any, cast
 
-import redis
+import redis.asyncio as redis
 
-from app.settings import Settings
-
-settings = Settings()  # type: ignore
+from app.settings import settings
 
 
 class RedisManager:
@@ -16,12 +14,16 @@ class RedisManager:
             decode_responses=True,
         )
 
-    def cache_json_item(self, key: str, value: dict[str, Any], ttl: int = 3600) -> None:
+    async def cache_json_item(
+        self, key: str, value: dict[str, Any], ttl: int = 3600
+    ) -> None:
         value_as_string = json.dumps(value)
-        self.redis_client.set(name=key, value=value_as_string, ex=ttl)
+        await self.redis_client.set(name=key, value=value_as_string, ex=ttl)
 
-    def get_json_item(self, key: str, default: None = None) -> dict[str, Any] | None:
-        value = self.redis_client.get(name=key)
+    async def get_json_item(
+        self, key: str, default: None = None
+    ) -> dict[str, Any] | None:
+        value = await self.redis_client.get(name=key)
 
         if value is None:
             return default
@@ -29,8 +31,20 @@ class RedisManager:
         value_decoded = json.loads(cast(str, value))
         return value_decoded
 
-    def delete_key(self, key: str) -> None:
-        self.redis_client.delete(key)
+    async def delete_key(self, key: str) -> None:
+        await self.redis_client.delete(key)
+
+    async def get_int(self, key: str) -> int:
+        value = await self.redis_client.get(name=key)
+        return int(value) if value is not None else 0
+
+    async def increment(self, key: str, ttl: int | None = None) -> int:
+        # Atomic INCR. When ttl is given, the expiry is set on first increment
+        # so the counter decays as a fixed window (used for failure lockouts).
+        value = await self.redis_client.incr(key)
+        if ttl is not None and value == 1:
+            await self.redis_client.expire(key, ttl)
+        return value
 
 
 redis_manager = RedisManager()

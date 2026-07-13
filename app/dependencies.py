@@ -27,7 +27,7 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     # check if the user token has been added to the list of logged out tokens
-    if redis_manager.get_json_item(token):
+    if await redis_manager.get_json_item(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or Expired credentials",
@@ -40,7 +40,14 @@ async def get_current_user(
         username = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = auth_schemas.TokenData(username=username)
+        # Reject refresh tokens (or any non-access token) on authenticated routes.
+        if payload.get("type") != "access":
+            raise credentials_exception
+        # Reject tokens issued before the user's last global logout.
+        version = await redis_manager.get_int(auth_services.token_version_key(username))
+        if payload.get("ver", 0) != version:
+            raise credentials_exception
+        token_data = auth_schemas.TokenData(email=username)
     except InvalidTokenError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -48,7 +55,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     user: UserDB | None = await auth_services.get_user(
-        email=token_data.username, session=db
+        email=token_data.email, session=db
     )
     if not user:
         raise credentials_exception

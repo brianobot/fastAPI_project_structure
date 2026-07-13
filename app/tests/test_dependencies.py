@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import dependencies
 from app.models import User as UserDB
 from app.routers.tests.conftest import access_token  # noqa
+from app.services import auth as auth_services
 
 
 async def test_get_db_yields_session():
@@ -69,3 +70,15 @@ class TestCurrentUserDependency:
             with pytest.raises(HTTPException) as exc:
                 await dependencies.get_current_user(access_token, session)
             assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+    async def test_get_current_user_rejects_non_access_token(self, session, user):
+        # A refresh token carries type="refresh" and must not authenticate a
+        # request. The user genuinely exists, so without the type check the token
+        # would be accepted like an access token - this pins the rejection.
+        refresh_token = auth_services.create_refresh_token({"sub": user.email})
+
+        with pytest.raises(HTTPException) as exc:
+            await dependencies.get_current_user(refresh_token, session)
+
+        assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc.value.detail == "Could not validate credentials"

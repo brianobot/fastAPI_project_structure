@@ -16,3 +16,4 @@ class UserFactory(factory.alchemy.SQLAlchemyModelFactory):
 
     email = factory.faker.Faker("email")
     password_hash = get_password_hash("password")
+    is_verified = True

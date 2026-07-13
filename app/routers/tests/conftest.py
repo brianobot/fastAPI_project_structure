@@ -1,10 +1,10 @@
-import faker
 import pytest
+from faker import Faker
 from httpx import AsyncClient
 
 from app.models.auth import User as UserDB
 
-faker = faker.Faker()
+faker = Faker()
 
 
 @pytest.fixture

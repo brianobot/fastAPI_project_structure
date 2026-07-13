@@ -8,15 +8,18 @@ from sqlalchemy import StaticPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.dependencies import get_db
+from app.limiter import limiter
 from app.main import app
 from app.models._base import AbstractBase
-from app.settings import Settings
+from app.redis_manager import redis_manager
+
+# The rate limiter uses an in-memory, IP-keyed counter shared across the whole
+# test session; disable it so unrelated tests don't exhaust each other's quota.
+limiter.enabled = False
 
 if typing.TYPE_CHECKING:
     pass
 
-
-settings = Settings()  # type: ignore
 
 # Uses an SQLITE In-memory DB for setting
 DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -43,6 +46,15 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(autouse=True)
 async def run_migrations():
     await setup_db()
+
+
+@pytest.fixture(autouse=True)
+async def close_redis_connections():
+    # redis.asyncio pools connections bound to the running event loop. Because
+    # pytest-asyncio gives each test a fresh loop, close the pool after every
+    # test so the next one reconnects instead of reusing a closed-loop socket.
+    yield
+    await redis_manager.redis_client.aclose()
 
 
 @pytest.fixture(scope="session", autouse=True)

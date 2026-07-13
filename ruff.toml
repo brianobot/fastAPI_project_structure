@@ -1,0 +1,3 @@
+# Minimum Python the project targets. Setting this teaches ruff which builtins
+# exist (e.g. `anext`, 3.10+) and enables version-appropriate lint rules.
+target-version = "py312"
