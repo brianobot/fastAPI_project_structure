@@ -4,14 +4,24 @@ from httpx import AsyncClient, Response
 from app.models import User as UserDB
 from app.redis_manager import redis_manager
 from app.schemas import auth as auth_schemas
-from app.schemas.auth import UserModel
+from app.services.auth import GENERIC_SIGNUP_MESSAGE
 
 
 async def test_signup_succeeds(client: AsyncClient, signup_data: dict[str, str]):
     response = await client.post("/v1/auth/signup", json=signup_data)
     assert response.status_code == 200
-    response_data = response.json()
-    assert UserModel.model_validate(response_data)
+    # Non-enumerable: a generic message, not the created user.
+    assert response.json()["detail"] == GENERIC_SIGNUP_MESSAGE
+
+
+async def test_signup_is_non_enumerable(client: AsyncClient, user: UserDB):
+    # Signing up with an ALREADY-registered email returns the same 200 +
+    # message as a fresh signup, so accounts can't be enumerated.
+    response = await client.post(
+        "/v1/auth/signup", json={"email": user.email, "password": "password123"}
+    )
+    assert response.status_code == 200
+    assert response.json()["detail"] == GENERIC_SIGNUP_MESSAGE
 
 
 @pytest.mark.parametrize(

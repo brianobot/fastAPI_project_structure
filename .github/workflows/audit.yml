@@ -3,6 +3,9 @@ name: Dependency Security Audit
 on:
   push:
     branches: [ "dev" ]
+  schedule:
+    # Weekly scan catches newly-disclosed CVEs in already-pinned deps.
+    - cron: "0 6 * * 1"
 
 jobs:
   security-scan:

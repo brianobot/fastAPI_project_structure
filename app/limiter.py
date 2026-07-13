@@ -10,5 +10,6 @@ from app.settings import settings
 # the app in main.py.
 limiter = Limiter(
     key_func=get_remote_address,
+    default_limits=[settings.RATE_LIMIT_DEFAULT],
     storage_uri=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}",
 )

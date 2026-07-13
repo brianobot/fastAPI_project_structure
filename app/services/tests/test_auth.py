@@ -168,8 +168,28 @@ async def test_signup_user(session: AsyncSession):
         session,
         BackgroundTasks(tasks=[]),
     )
-    assert isinstance(result, UserDB)
-    assert result.email == email
+    # Returns a generic message (non-enumerable), but the account is created.
+    assert result == {"detail": auth_services.GENERIC_SIGNUP_MESSAGE}
+    assert await auth_services.get_user(email, session) is not None
+
+
+async def test_signup_user_existing_email_is_silent(
+    user: UserDB, session: AsyncSession
+):
+    # Same message for an already-registered email; nothing leaks.
+    result = await auth_services.signup_user(
+        auth_schemas.UserSignUpData(email=user.email, password="password"),
+        session,
+        BackgroundTasks(tasks=[]),
+    )
+    assert result == {"detail": auth_services.GENERIC_SIGNUP_MESSAGE}
+
+
+async def test_email_cooldown_blocks_rapid_resends():
+    email = faker.email()
+    # First send is allowed, an immediate second is throttled.
+    assert await auth_services.email_cooldown_active("reset", email) is False
+    assert await auth_services.email_cooldown_active("reset", email) is True
 
 
 @pytest.mark.parametrize(
