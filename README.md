@@ -28,6 +28,8 @@ This repository provides a clean and scalable template for building FastAPI appl
 
 
 ## Getting Started
+> Requires **Python 3.12+** (the codebase uses PEP 695 generic syntax).
+
 In order to get started with the FastAPI Project, follow the following steps
 - [ ] Activate Project Python Virtual Environment
    ```bash
@@ -68,6 +70,38 @@ The template is **async-first** and organizes each feature across four layers. W
 Request flow: a router aggregates into [`app/api_router.py`](./app/api_router.py) under the `/v1` prefix, which is mounted in [`app/main.py`](./app/main.py). `main.py` also assembles the middleware stack (CORS → GZip → TrustedHost → docs gate → request logging), a `slowapi` rate limiter, and uniform JSON exception handlers.
 
 Supporting singletons: [`redis_manager`](./app/redis_manager.py) (async Redis for the token blacklist and one-time codes) and [`send_mail`](./app/mailer.py) (Jinja templates from `app/templates/`, always dispatched via FastAPI `BackgroundTasks`).
+
+### Paginated responses
+
+[`app/schemas/__init__.py`](./app/schemas/__init__.py) provides a reusable generic envelope for list endpoints, `PaginatedResponse[T]`, so paginated payloads share one consistent shape:
+
+| Field | Meaning |
+| --- | --- |
+| `total_results` | total rows matching the query |
+| `current_page` | 1-based page number returned |
+| `total_pages` | total number of pages |
+| `per_page` | page size used |
+| `results` | the page of items, typed as `list[T]` |
+
+Parameterize it with the item schema and use it as the endpoint's `response_model`:
+
+```python
+from app.schemas import PaginatedResponse
+from app.schemas.auth import UserModel
+
+@router.get("/users", response_model=PaginatedResponse[UserModel])
+async def list_users(db: DBDep, page: int = 1, per_page: int = 20):
+    # ... run the query, collect `users` and `total_results` ...
+    return PaginatedResponse[UserModel](
+        total_results=total_results,
+        current_page=page,
+        total_pages=-(-total_results // per_page),  # ceiling division
+        per_page=per_page,
+        results=users,
+    )
+```
+
+> The model uses PEP 695 generic syntax (`class PaginatedResponse[T]`), which needs **Python 3.12+** and **mypy ≥ 1.12** — the CI workflows and the pre-commit `mypy` pin are set accordingly. On an older toolchain you'd see `Name "T" is not defined`; bump the versions (or fall back to the classic `Generic[T]` + `TypeVar` form).
 
 ## Project Structure
 

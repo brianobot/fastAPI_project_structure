@@ -27,9 +27,9 @@ repos:
       - id: ruff
         args: [ --fix ]
 
-  # 4. Type Checking (Mypy)
+  # 4. Type Checking (Mypy) — v1.7.1 predates PEP 695; needs >= 1.12
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
+    rev: v1.15.0
     hooks:
       - id: mypy
         additional_dependencies:
