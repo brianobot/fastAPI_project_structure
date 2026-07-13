@@ -299,6 +299,30 @@ async def test_refresh_token_payload_return_none(session: AsyncSession):
     assert err.value.detail == "Invalid Refresh Token"
 
 
+async def test_refresh_reuse_kills_session_family(user: UserDB, session: AsyncSession):
+    initial = auth_services.create_refresh_token(
+        {"sub": user.email, "ver": 0}, auth_services.REFRESH_TOKEN_LIFESPAN
+    )
+    rotated = await auth_services.refresh_token(
+        auth_schemas.RefreshTokenModel(refresh_token=initial), session
+    )
+
+    # Replaying the old (rotated) token is a reuse signal -> escalate.
+    with pytest.raises(HTTPException):
+        await auth_services.refresh_token(
+            auth_schemas.RefreshTokenModel(refresh_token=initial), session
+        )
+
+    # The escalation bumped the token version, so even the freshly-issued
+    # refresh token from the first rotation is now rejected.
+    with pytest.raises(HTTPException) as err:
+        await auth_services.refresh_token(
+            auth_schemas.RefreshTokenModel(refresh_token=rotated.refresh_token),
+            session,
+        )
+    assert err.value.status_code == 401
+
+
 async def test_reset_password_locks_out_after_max_attempts(
     user: UserDB, session: AsyncSession
 ):

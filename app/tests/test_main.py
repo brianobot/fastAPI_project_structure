@@ -20,6 +20,13 @@ async def test_health_endpoint_ok(client):
     assert body["checks"] == {"database": "ok", "redis": "ok"}
 
 
+async def test_security_headers_present(client):
+    response = await client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert "referrer-policy" in response.headers
+
+
 async def test_http_exception_handler():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

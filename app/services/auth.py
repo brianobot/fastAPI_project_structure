@@ -26,14 +26,32 @@ REFRESH_TOKEN_LIFESPAN = timedelta(days=settings.REFRESH_TOKEN_LIFESPAN_DAYS)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/token")
 
-# Per-user token version. Bumped on logout to invalidate every token issued
-# before it (global logout). Failure counters gate code brute-forcing.
+# Per-user token version. Bumped on logout / password change to invalidate
+# every token issued before it. Failure counters gate code brute-forcing.
 MAX_CODE_ATTEMPTS = 5
 CODE_LOCKOUT_SECONDS = 15 * 60
 
 
+# --- Redis key builders (single source of truth for key formats) ------------
 def token_version_key(email: str) -> str:
     return f"token-version-{email}"
+
+
+def activation_code_key(email: str) -> str:
+    return f"activation-code-{email}"
+
+
+def reset_code_key(email: str) -> str:
+    return f"reset-code-{email}"
+
+
+def failed_attempts_key(scope: str, email: str) -> str:
+    return f"failed-{scope}-{email}"
+
+
+async def invalidate_all_sessions(email: str) -> None:
+    """Bump the user's token version so every existing token is rejected."""
+    await redis_manager.increment(token_version_key(email))
 
 
 async def guard_code_attempts(scope: str, email: str) -> str:
@@ -42,7 +60,7 @@ async def guard_code_attempts(scope: str, email: str) -> str:
     submissions for (scope, email), lock the account out for CODE_LOCKOUT_SECONDS.
     Returns the counter key so the caller can register a failure or clear it.
     """
-    key = f"failed-{scope}-{email}"
+    key = failed_attempts_key(scope, email)
     if await redis_manager.get_int(key) >= MAX_CODE_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -106,7 +124,7 @@ async def initiate_password_reset(
 
     code = generate_random_code(6)
     await redis_manager.cache_json_item(
-        f"reset-code-{email}", {"code": code}, ttl=60 * 30
+        reset_code_key(email), {"code": code}, ttl=60 * 30
     )
 
     background_task.add_task(
@@ -124,7 +142,7 @@ async def reset_password(
     reset_data: auth_schema.PasswordResetData, session: AsyncSession
 ):
     attempt_key = await guard_code_attempts("reset", reset_data.email)
-    data = await redis_manager.get_json_item(f"reset-code-{reset_data.email}")
+    data = await redis_manager.get_json_item(reset_code_key(reset_data.email))
     if not data or data.get("code") != reset_data.code:
         await redis_manager.increment(attempt_key, ttl=CODE_LOCKOUT_SECONDS)
         raise HTTPException(status_code=400, detail="Invalid Reset Code")
@@ -145,8 +163,11 @@ async def reset_password(
     await session.commit()
 
     # Consume the code and clear the failure counter on success.
-    await redis_manager.delete_key(f"reset-code-{reset_data.email}")
+    await redis_manager.delete_key(reset_code_key(reset_data.email))
     await redis_manager.delete_key(attempt_key)
+    # A password reset must revoke every existing session (the point of a reset
+    # is often that the old credentials/tokens are compromised).
+    await invalidate_all_sessions(reset_data.email)
 
     return {"detail": "Password Reset Successfully"}
 
@@ -183,12 +204,15 @@ async def update_user(
     )
     result = await session.execute(stmt)
     await session.commit()
+    # Changing the password revokes existing sessions on other devices.
+    if new_password:
+        await invalidate_all_sessions(email)
     return result.scalar_one()
 
 
 def create_access_token(
     data: dict[str, str | int | datetime], expires_delta: timedelta | None = None
-):
+) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or ACCESS_TOKEN_LIFESPAN)
     # jti makes every token unique (so distinct logins never collide); type and
@@ -199,7 +223,7 @@ def create_access_token(
 
 def create_refresh_token(
     data: dict[str, str | int | datetime], expires_delta: timedelta | None = None
-):
+) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or REFRESH_TOKEN_LIFESPAN)
     to_encode.update({"exp": expire, "type": "refresh", "jti": secrets.token_hex(16)})
@@ -226,7 +250,7 @@ async def signup_user(
 
     code = generate_random_code(6)
     await redis_manager.cache_json_item(
-        f"activation-code-{data.email}", {"code": code}, ttl=60 * 30
+        activation_code_key(data.email), {"code": code}, ttl=60 * 30
     )
 
     bg_task.add_task(
@@ -249,7 +273,7 @@ async def resend_activation_code(
 
     code = generate_random_code(6)
     await redis_manager.cache_json_item(
-        f"activation-code-{email}", {"code": code}, ttl=60 * 30
+        activation_code_key(email), {"code": code}, ttl=60 * 30
     )
 
     bg_task.add_task(
@@ -269,7 +293,7 @@ async def activate_user(
 ):
     attempt_key = await guard_code_attempts("activation", verification_data.email)
     data = await redis_manager.get_json_item(
-        f"activation-code-{verification_data.email}"
+        activation_code_key(verification_data.email)
     )
 
     if not data or data.get("code") != verification_data.code:
@@ -285,7 +309,7 @@ async def activate_user(
     await session.commit()
 
     # Consume the code and clear the failure counter on success.
-    await redis_manager.delete_key(f"activation-code-{verification_data.email}")
+    await redis_manager.delete_key(activation_code_key(verification_data.email))
     await redis_manager.delete_key(attempt_key)
 
     bg_task.add_task(
@@ -355,8 +379,22 @@ async def blacklist_token(token: str) -> None:
 async def refresh_token(
     token_data: auth_schema.RefreshTokenModel, session: AsyncSession
 ):
-    # Reject tokens blacklisted at logout or by a previous rotation.
+    # A refresh token already blacklisted (by logout or a prior rotation) but
+    # presented again is a reuse signal - a rotated token should never come back.
+    # Treat it as possible theft and kill the whole session family.
     if await redis_manager.get_json_item(token_data.refresh_token):
+        try:
+            stale = jwt.decode(
+                token_data.refresh_token,
+                JWT_SECRET,
+                algorithms=[JWT_ALGORITHM],
+                options={"verify_exp": False},
+            )
+            stale_sub = stale.get("sub")
+            if isinstance(stale_sub, str):
+                await invalidate_all_sessions(stale_sub)
+        except InvalidTokenError:
+            pass
         raise HTTPException(status_code=401, detail="Invalid Refresh Token")
 
     try:
@@ -419,5 +457,5 @@ async def logout(
     # Bump the user's token version so EVERY token issued before now (across all
     # devices) is invalidated, not just the pair presented here.
     if email:
-        await redis_manager.increment(token_version_key(email))
+        await invalidate_all_sessions(email)
     return {"detail": "User Logged Out Successfully"}

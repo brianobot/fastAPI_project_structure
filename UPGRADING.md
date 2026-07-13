@@ -28,6 +28,10 @@ independent, so apply them in any order you like and run your tests after each.
 | Global logout (token versioning) | **Breaking (tokens)** | Adds `ver` claim; see §11 |
 | Account lockout on codes | Behavioral | See §12 |
 | Rate limiting | **Optional** | Skip it — see §13 |
+| Revoke sessions on password change + reuse detection | Behavioral | See §14 |
+| Security response headers | Safe (additive) | See §15 |
+| Proxy headers behind a load balancer | Deploy config | See §16 |
+| CI hardening (SAST, lint gate, coverage floor) | Safe (additive) | See §17 |
 
 **Backup first:** commit or branch before starting, and snapshot your database
 before running the migration in §6.
@@ -546,6 +550,102 @@ limiter.enabled = False
 
 If you enable it in a specific test, use a **unique client key per run** (the
 Redis-backed counter persists across runs within the window) to avoid flakiness.
+
+---
+
+## 14. Revoke sessions on password change + refresh-reuse detection
+
+Builds on the token versioning from §11.
+
+**Kill all sessions when the password changes.** A reset/change usually means the
+old credentials are compromised, so bump the token version after a successful
+`reset_password` (and after a password change in `update_user`):
+
+```python
+async def invalidate_all_sessions(email: str) -> None:
+    await redis_manager.increment(token_version_key(email))
+
+# reset_password(), after the password UPDATE commits:
+await invalidate_all_sessions(reset_data.email)
+
+# update_user(), after the UPDATE commits, only when the password changed:
+if new_password:
+    await invalidate_all_sessions(email)
+```
+
+> A password *change* logs the user out of their **current** session too (the
+> access token used for the request is invalidated for subsequent calls). That's
+> the secure default; have the client re-authenticate afterward.
+
+**Refresh-reuse detection.** A rotated refresh token should never come back. If a
+blacklisted refresh token is presented again, treat it as theft and revoke the
+whole family:
+
+```python
+if await redis_manager.get_json_item(token_data.refresh_token):
+    try:
+        stale = jwt.decode(token_data.refresh_token, JWT_SECRET,
+                           algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+        if isinstance(stale.get("sub"), str):
+            await invalidate_all_sessions(stale["sub"])
+    except InvalidTokenError:
+        pass
+    raise HTTPException(status_code=401, detail="Invalid Refresh Token")
+```
+
+**Readability tip (optional):** while you're here, move the Redis key formats into
+builder functions (`activation_code_key`, `reset_code_key`, `failed_attempts_key`,
+`token_version_key`) so formats and TTLs live in one place.
+
+---
+
+## 15. Security response headers
+
+Add a middleware that stamps hardening headers on every response:
+
+```python
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if not settings.DEBUG:   # HSTS only over HTTPS
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+```
+
+> A strict `Content-Security-Policy` is intentionally omitted — it breaks the
+> Swagger UI (CDN + inline scripts). Add one scoped to your own frontend if needed.
+
+---
+
+## 16. Proxy headers behind a load balancer
+
+Per-IP rate limiting and request logging read `request.client.host`. Behind a
+proxy that's the **proxy's** IP unless you enable forwarded headers — so run:
+
+```bash
+uvicorn app.main:app --proxy-headers --forwarded-allow-ips="<proxy-ip>"
+```
+
+Restrict `--forwarded-allow-ips` to your proxy's address(es); `"*"` trusts any
+client's `X-Forwarded-For` and is spoofable if you're not actually behind a proxy.
+
+---
+
+## 17. CI hardening (optional)
+
+- **Replace the dead `safety check`** (it now needs an account) with SAST:
+  `pip install bandit && bandit -r app -x <tests> --severity-level medium`.
+- **Add a lint/type gate** — run `ruff`, `black --check`, `isort --check-only`,
+  and `mypy app` as a CI job, not just in pre-commit.
+- **Floor your coverage**: `coverage report --fail-under=90` so it can't silently
+  regress.
+- **Bump CI Python to 3.12+** if you adopted the `PaginatedResponse[T]` generic
+  (PEP 695), and pin pre-commit `mypy` to ≥ 1.12.
 
 ---
 

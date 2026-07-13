@@ -16,7 +16,11 @@ from app.api_router import api
 from app.database import AsyncSessionLocal
 from app.limiter import limiter
 from app.logger import logger
-from app.middlewares import AllowAuthorizedDocAccess, log_request_middleware
+from app.middlewares import (
+    AllowAuthorizedDocAccess,
+    SecurityHeadersMiddleware,
+    log_request_middleware,
+)
 from app.redis_manager import redis_manager
 from app.routers.health import router as health_router
 from app.settings import settings
@@ -83,6 +87,7 @@ def initiate_app():
         ],
     )
     app.add_middleware(AllowAuthorizedDocAccess)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(BaseHTTPMiddleware, dispatch=log_request_middleware)
 
     # Enforce the rate limits declared via @limiter.limit(...) on the routes.

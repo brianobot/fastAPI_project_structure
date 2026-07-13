@@ -23,6 +23,24 @@ async def log_request_middleware(request: Request, call_next):
     return response
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add baseline hardening headers to every response."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # HSTS only makes sense over HTTPS; enable it outside local/dev.
+        if not settings.DEBUG:
+            response.headers[
+                "Strict-Transport-Security"
+            ] = "max-age=31536000; includeSubDomains"
+        return response
+
+
 class AllowAuthorizedDocAccess(BaseHTTPMiddleware):
     allowed_ips = [
         "127.0.0.1",  # allows Viewing Docs in Local Development Environment

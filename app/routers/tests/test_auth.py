@@ -191,6 +191,25 @@ async def test_logout_with_refresh_token_revokes_it(client: AsyncClient, user: U
     assert refreshed.status_code == 401
 
 
+async def test_password_reset_revokes_existing_sessions(
+    client: AsyncClient, user: UserDB
+):
+    login = {"username": user.email, "password": "password"}
+    access = (await client.post("/v1/auth/token", data=login)).json()["access_token"]
+    header = {"Authorization": f"Bearer {access}"}
+    assert (await client.get("/v1/auth/me", headers=header)).status_code == 200
+
+    await redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+    reset = await client.post(
+        "/v1/auth/reset_password",
+        json={"code": "000000", "email": user.email, "new_password": "brandnewpass"},
+    )
+    assert reset.status_code == 200
+
+    # The pre-reset access token must no longer authenticate.
+    assert (await client.get("/v1/auth/me", headers=header)).status_code == 401
+
+
 async def test_logout_invalidates_all_user_tokens(client: AsyncClient, user: UserDB):
     login = {"username": user.email, "password": "password"}
     first = (await client.post("/v1/auth/token", data=login)).json()["access_token"]
