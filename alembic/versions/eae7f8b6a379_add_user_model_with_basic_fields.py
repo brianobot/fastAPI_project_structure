@@ -25,7 +25,12 @@ def upgrade() -> None:
         "users",
         sa.Column("email", sa.String(), nullable=False),
         sa.Column("password_hash", sa.String(), nullable=False),
-        sa.Column("is_verified", sa.Boolean(), nullable=False),
+        sa.Column(
+            "is_verified",
+            sa.Boolean(),
+            server_default=sa.false(),
+            nullable=False,
+        ),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
             "date_created",

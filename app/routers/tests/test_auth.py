@@ -54,7 +54,9 @@ async def test_signup_fails(
 
 
 async def test_activate_user(client: AsyncClient, user: UserDB):
-    redis_manager.cache_json_item(f"activation-code-{user.email}", {"code": "000000"})
+    await redis_manager.cache_json_item(
+        f"activation-code-{user.email}", {"code": "000000"}
+    )
     response: Response = await client.post(
         "/v1/auth/activation", json={"code": "000000", "email": user.email}
     )
@@ -64,7 +66,9 @@ async def test_activate_user(client: AsyncClient, user: UserDB):
 
 
 async def test_resend_activation_code(client: AsyncClient, user: UserDB):
-    redis_manager.cache_json_item(f"activation-code-{user.email}", {"code": "000000"})
+    await redis_manager.cache_json_item(
+        f"activation-code-{user.email}", {"code": "000000"}
+    )
     response: Response = await client.post(
         "/v1/auth/resend_activation", json={"email": user.email}
     )
@@ -84,7 +88,7 @@ async def test_initiate_password_reset(client: AsyncClient, signup_data: dict):
 
 async def test_reset_password(client: AsyncClient, user: UserDB):
     # Seed the value to be validated against
-    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+    await redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
     data = {"new_password": "password", "email": user.email, "code": "000000"}
     response: Response = await client.post("/v1/auth/reset_password", json=data)
     assert response.status_code == 200
@@ -93,7 +97,7 @@ async def test_reset_password(client: AsyncClient, user: UserDB):
 
 async def test_reset_password_fails(client: AsyncClient, user: UserDB):
     # Seed the value to be validated against
-    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
+    await redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "0000"})
     data = {"new_password": "password", "email": user.email, "code": "1111"}
     response: Response = await client.post("/v1/auth/reset_password", json=data)
     assert response.status_code == 400
@@ -163,6 +167,48 @@ async def test_logout(client: AsyncClient, auth_header: dict[str, str]):
 
     failed_response = await client.get("v1/auth/me", headers=auth_header)
     assert failed_response.status_code == 401
+
+
+async def test_logout_with_refresh_token_revokes_it(client: AsyncClient, user: UserDB):
+    tokens = (
+        await client.post(
+            "/v1/auth/token", data={"username": user.email, "password": "password"}
+        )
+    ).json()
+    access, refresh = tokens["access_token"], tokens["refresh_token"]
+
+    logout = await client.post(
+        "/v1/auth/logout",
+        headers={"Authorization": f"Bearer {access}"},
+        json={"refresh_token": refresh},
+    )
+    assert logout.status_code == 200
+
+    # The refresh token was blacklisted at logout, so it can no longer refresh.
+    refreshed = await client.post(
+        "/v1/auth/refresh_token", json={"refresh_token": refresh}
+    )
+    assert refreshed.status_code == 401
+
+
+async def test_logout_invalidates_all_user_tokens(client: AsyncClient, user: UserDB):
+    login = {"username": user.email, "password": "password"}
+    first = (await client.post("/v1/auth/token", data=login)).json()["access_token"]
+    second = (await client.post("/v1/auth/token", data=login)).json()["access_token"]
+    assert first != second  # jti makes each issued token unique
+
+    header_second = {"Authorization": f"Bearer {second}"}
+    assert (await client.get("/v1/auth/me", headers=header_second)).status_code == 200
+
+    # Log out using the FIRST token; this bumps the user's token version.
+    logout = await client.post(
+        "/v1/auth/logout", headers={"Authorization": f"Bearer {first}"}
+    )
+    assert logout.status_code == 200
+
+    # The SECOND token was never blacklisted, but the version bump invalidates
+    # every token issued before the logout - a global "log out everywhere".
+    assert (await client.get("/v1/auth/me", headers=header_second)).status_code == 401
 
 
 async def test_get_user_detail(

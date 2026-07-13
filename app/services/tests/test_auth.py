@@ -47,63 +47,6 @@ async def test_create_user_fails(
     assert "Email already registered" in str(err.value)
 
 
-async def test_verify_user_succeeds(user: UserDB, session: AsyncSession):
-    verification_data = auth_schemas.UserVerificationModel(
-        email=user.email, code="000000"
-    )
-    redis_manager.cache_json_item(
-        f"verification-code-{verification_data.email}", {"code": "000000"}
-    )
-    user = await auth_services.verify_user(
-        verification_data,
-        BackgroundTasks(tasks=[]),
-        session,
-    )
-    # test that the flag for verified user is activated
-
-
-@pytest.mark.parametrize(
-    "verification_data,cached_code",
-    [
-        ({"email": faker.email(), "code": "000000"}, {"code": "000000"}),
-        ({"email": faker.email(), "code": "000000"}, {"code": "000001"}),
-        ({"email": faker.email(), "code": "000000"}, None),
-    ],
-)
-async def test_verify_user_fails(
-    user: UserDB,
-    session: AsyncSession,
-    verification_data: dict[str, str],
-    cached_code: dict[str, str] | None,
-):
-    data = auth_schemas.UserVerificationModel(**verification_data)
-    redis_manager.cache_json_item(
-        f"verification-code-{data.email}", cached_code  # type: ignore
-    )
-    with pytest.raises(HTTPException) as err:
-        await auth_services.verify_user(
-            data,
-            BackgroundTasks(tasks=[]),
-            session,
-        )
-
-    assert err.value.detail == "Invalid Verification Code"
-
-
-async def test_resend_verification_code_for_user(user: UserDB, session: AsyncSession):
-    result = await auth_services.resend_verification_code(
-        user.email, session, BackgroundTasks(tasks=[])
-    )
-    assert result == {"detail": "Verification code resent"}
-
-
-async def test_resend_verification_code_for_none_user(session: AsyncSession):
-    result = await auth_services.resend_verification_code(
-        faker.email(), session, BackgroundTasks(tasks=[])
-    )
-    assert result == {"detail": "Verification code resent"}
-
-
 async def test_initiate_password_reset_for_user(user: UserDB, session: AsyncSession):
     result = await auth_services.initiate_password_reset(
         user.email, session, BackgroundTasks(tasks=[])
@@ -119,7 +62,7 @@ async def test_initiate_password_reset_for_none_user(session: AsyncSession):
 
 
 async def test_reset_password_for_user(user: UserDB, session: AsyncSession):
-    redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+    await redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
     result = await auth_services.reset_password(
         auth_schemas.PasswordResetData(
             code="000000", email=user.email, new_password="newpassword"
@@ -138,7 +81,7 @@ async def test_reset_password_for_user(user: UserDB, session: AsyncSession):
 )
 async def test_reset_password_fails(user: UserDB, session: AsyncSession, code: str):
     none_existence_email = faker.email()
-    redis_manager.cache_json_item(
+    await redis_manager.cache_json_item(
         f"reset-code-{none_existence_email}", {"code": "000000"}
     )
     with pytest.raises(HTTPException) as err:
@@ -232,14 +175,16 @@ async def test_signup_user(session: AsyncSession):
 @pytest.mark.parametrize(
     "code,response_message",
     [
-        ("111111", "Invalid Reset Code"),
+        ("111111", "Invalid Activation Code"),
         ("000000", "Email Activation Successful"),
     ],
 )
 async def test_activate_user(
     user: UserDB, session: AsyncSession, code: str, response_message: str
 ):
-    redis_manager.cache_json_item(f"activation-code-{user.email}", {"code": "000000"})
+    await redis_manager.cache_json_item(
+        f"activation-code-{user.email}", {"code": "000000"}
+    )
     if code != "000000":
         with pytest.raises(HTTPException) as err:
             result = await auth_services.activate_user(
@@ -303,6 +248,21 @@ async def test_signin_user_for_none_user(session: AsyncSession):
     assert err.value.detail == "Incorrect email or password"
 
 
+async def test_signin_unverified_user_forbidden(session: AsyncSession):
+    # create_user leaves is_verified False, so sign-in must be rejected.
+    email = faker.email()
+    await auth_services.create_user(
+        auth_schemas.UserSignUpData(email=email, password="password"), session
+    )
+    with pytest.raises(HTTPException) as err:
+        await auth_services.signin_user(
+            auth_schemas.UserSignInData(email=email, password="password"), session
+        )
+
+    assert err.value.status_code == 403
+    assert err.value.detail == "Email not verified"
+
+
 async def test_refresh_token(user: UserDB, session: AsyncSession):
     initial_refresh_token = auth_services.create_refresh_token({"sub": user.email})
     updated_refreshed_token = await auth_services.refresh_token(
@@ -336,4 +296,50 @@ async def test_refresh_token_payload_return_none(session: AsyncSession):
                 auth_schemas.RefreshTokenModel(refresh_token=invalid_refresh_token),
                 session,
             )
+    assert err.value.detail == "Invalid Refresh Token"
+
+
+async def test_reset_password_locks_out_after_max_attempts(
+    user: UserDB, session: AsyncSession
+):
+    await redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+
+    # MAX_CODE_ATTEMPTS wrong codes each fail with 400 ...
+    for _ in range(auth_services.MAX_CODE_ATTEMPTS):
+        with pytest.raises(HTTPException) as err:
+            await auth_services.reset_password(
+                auth_schemas.PasswordResetData(
+                    code="999999", email=user.email, new_password="newpassword"
+                ),
+                session,
+            )
+        assert err.value.status_code == 400
+
+    # ... then the account is locked out, even for the CORRECT code.
+    with pytest.raises(HTTPException) as err:
+        await auth_services.reset_password(
+            auth_schemas.PasswordResetData(
+                code="000000", email=user.email, new_password="newpassword"
+            ),
+            session,
+        )
+    assert err.value.status_code == 429
+
+
+async def test_refresh_token_is_single_use(user: UserDB, session: AsyncSession):
+    initial_token = auth_services.create_refresh_token(
+        {"sub": user.email}, auth_services.REFRESH_TOKEN_LIFESPAN
+    )
+    # First use rotates the token and returns a fresh pair.
+    first = await auth_services.refresh_token(
+        auth_schemas.RefreshTokenModel(refresh_token=initial_token), session
+    )
+    assert isinstance(first, auth_schemas.Token)
+
+    # Reusing the now-rotated (blacklisted) token must be rejected.
+    with pytest.raises(HTTPException) as err:
+        await auth_services.refresh_token(
+            auth_schemas.RefreshTokenModel(refresh_token=initial_token), session
+        )
+    assert err.value.status_code == 401
     assert err.value.detail == "Invalid Refresh Token"

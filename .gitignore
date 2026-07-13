@@ -7,3 +7,5 @@ logs/
 .mypy_cache/
 .coverage
 htmlcov/
+.claude/
+CLAUDE.md

@@ -25,7 +25,7 @@ class JsonFormatter(logging.Formatter):
 file_handler = TimedRotatingFileHandler(
     LOG_FILE,
     when="midnight",
-    interval=1 // 86400,
+    interval=1,
     backupCount=7,
 )
 

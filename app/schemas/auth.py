@@ -14,11 +14,16 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: str
+    email: str
 
 
 class RefreshTokenModel(BaseModel):
     refresh_token: Annotated[str, Field(min_length=32)]
+
+
+class LogoutData(BaseModel):
+    # Optional: supply the refresh token on logout so it is blacklisted too.
+    refresh_token: Annotated[str, Field(min_length=32)] | None = None
 
 
 class UserSignUpData(BaseModel):
@@ -34,25 +39,26 @@ class UserVerificationModel(BaseModel):
 class PasswordResetData(BaseModel):
     code: str
     email: Annotated[EmailStr, Field(max_length=254), AfterValidator(str.lower)]
-    new_password: Annotated[str, Field(min_length=8)]
+    new_password: Annotated[str, Field(min_length=8, max_length=50)]
 
 
 class UserSignInData(BaseModel):
-    email: Annotated[EmailStr, Field(max_length=100), AfterValidator(str.lower)]
-    password: Annotated[str, Field(min_length=8)]
+    email: Annotated[EmailStr, Field(max_length=254), AfterValidator(str.lower)]
+    password: Annotated[str, Field(min_length=8, max_length=50)]
 
 
 class UserModel(BaseModel):
     id: UUID
 
     email: EmailStr
+    is_verified: bool
     date_created: datetime
     date_updated: datetime
 
 
 class UpdateUserModel(BaseModel):
-    old_password: Annotated[str | None, Field(min_length=8)] = None
-    new_password: Annotated[str | None, Field(min_length=8)] = None
+    old_password: Annotated[str | None, Field(min_length=8, max_length=50)] = None
+    new_password: Annotated[str | None, Field(min_length=8, max_length=50)] = None
 
     @model_validator(mode="after")
     def check_password_dependency(self) -> "UpdateUserModel":

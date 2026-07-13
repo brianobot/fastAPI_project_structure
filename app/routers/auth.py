@@ -1,18 +1,16 @@
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Body, Depends, HTTPException, status
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Request, status
 from fastapi.routing import APIRouter
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import EmailStr, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db
+from app.limiter import limiter
 from app.models import User as UserDB
 from app.schemas import auth as auth_schemas
 from app.services import auth as auth_services
-from app.settings import Settings
-
-settings = Settings()  # type: ignore
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -24,7 +22,9 @@ CurrentUserDep = Annotated[UserDB, Depends(get_current_user)]
 
 
 @router.post("/signup", response_model=auth_schemas.UserModel)
+@limiter.limit("5/minute")
 async def signup(
+    request: Request,
     db: DBDep,
     bg_task: BackgroundTasks,  # needed to send verification/welcome email
     payload: auth_schemas.UserSignUpData,
@@ -33,7 +33,9 @@ async def signup(
 
 
 @router.post("/activation")
+@limiter.limit("10/minute")
 async def activate_user(
+    request: Request,
     db: DBDep,
     bg_task: BackgroundTasks,  # needed to send verification/welcome email
     payload: auth_schemas.UserVerificationModel,
@@ -42,7 +44,9 @@ async def activate_user(
 
 
 @router.post("/resend_activation")
+@limiter.limit("3/minute")
 async def resend_activation_code(
+    request: Request,
     db: DBDep,
     email: EmailBody,
     bg_task: BackgroundTasks,  # needed to send verification/welcome email
@@ -51,7 +55,9 @@ async def resend_activation_code(
 
 
 @router.post("/initiate_password_reset")
+@limiter.limit("3/minute")
 async def initiate_password_reset(
+    request: Request,
     db: DBDep,
     email: EmailBody,
     background_task: BackgroundTasks,
@@ -60,7 +66,9 @@ async def initiate_password_reset(
 
 
 @router.post("/reset_password")
+@limiter.limit("5/minute")
 async def reset_password(
+    request: Request,
     db: DBDep,
     reset_data: auth_schemas.PasswordResetData,
 ):
@@ -68,7 +76,12 @@ async def reset_password(
 
 
 @router.post("/token", response_model=auth_schemas.Token)
-async def signin(db: DBDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+@limiter.limit("10/minute")
+async def signin(
+    request: Request,
+    db: DBDep,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+):
     try:
         login_data = auth_schemas.UserSignInData.model_validate(
             {"email": form_data.username, "password": form_data.password}
@@ -83,13 +96,18 @@ async def signin(db: DBDep, form_data: Annotated[OAuth2PasswordRequestForm, Depe
 
 @router.post("/logout")
 async def logout(
-    _: CurrentUserDep, token: Annotated[str, Depends(auth_services.oauth2_scheme)]
+    user: CurrentUserDep,
+    token: Annotated[str, Depends(auth_services.oauth2_scheme)],
+    payload: auth_schemas.LogoutData | None = None,
 ):
-    return await auth_services.logout(token)
+    refresh = payload.refresh_token if payload else None
+    return await auth_services.logout(token, refresh, user.email)
 
 
 @router.post("/refresh_token")
+@limiter.limit("10/minute")
 async def get_refresh_token(
+    request: Request,
     db: DBDep,
     token_data: auth_schemas.RefreshTokenModel,
 ):

@@ -12,6 +12,14 @@ async def test_lifespan():
         pass
 
 
+async def test_health_endpoint_ok(client):
+    response = await client.get("/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["checks"] == {"database": "ok", "redis": "ok"}
+
+
 async def test_http_exception_handler():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

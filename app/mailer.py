@@ -6,9 +6,7 @@ from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from fastapi_mail.errors import ConnectionErrors
 
 from app.logger import logger
-from app.settings import Settings
-
-settings = Settings()  # type: ignore
+from app.settings import settings
 
 conf = ConnectionConfig(
     MAIL_USERNAME=settings.MAIL_USERNAME,
@@ -20,7 +18,7 @@ conf = ConnectionConfig(
     MAIL_STARTTLS=False,
     MAIL_SSL_TLS=True,
     USE_CREDENTIALS=True,
-    VALIDATE_CERTS=False,
+    VALIDATE_CERTS=True,
     TEMPLATE_FOLDER=Path(__file__).parent / "templates/",
 )
 
@@ -30,13 +28,13 @@ async def send_mail(
     receipients: List[str],
     payload: dict,
     template: str,
-    attachments: List[UploadFile] = [],
+    attachments: List[UploadFile] | None = None,
 ):
     message = MessageSchema(
         subject=subject,
         recipients=receipients,  # type: ignore
         subtype=MessageType.html,
-        attachments=attachments,  # type: ignore
+        attachments=attachments or [],  # type: ignore
         template_body=payload,
     )
 
