@@ -36,6 +36,7 @@ CODE_EMAIL_COOLDOWN_SECONDS = 60
 # Signup responds identically whether or not the email is already registered,
 # so an attacker can't enumerate accounts through the signup endpoint.
 GENERIC_SIGNUP_MESSAGE = "Please check your email to activate your account."
+VERIFICATION_CODE_LENGTH = settings.VERIFICATION_CODE_LENGTH
 
 
 # --- Redis key builders (single source of truth for key formats) ------------
@@ -150,7 +151,7 @@ async def initiate_password_reset(
     if not user or await email_cooldown_active("reset", email):
         return {"detail": "Password Reset Code Sent"}
 
-    code = generate_random_code(6)
+    code = generate_random_code(VERIFICATION_CODE_LENGTH)
     await redis_manager.cache_json_item(
         reset_code_key(email), {"code": code}, ttl=60 * 30
     )
@@ -287,7 +288,7 @@ async def signup_user(
 
     user = await create_user(data, session)
 
-    code = generate_random_code(6)
+    code = generate_random_code(VERIFICATION_CODE_LENGTH)
     await redis_manager.cache_json_item(
         activation_code_key(data.email), {"code": code}, ttl=60 * 30
     )
@@ -310,7 +311,7 @@ async def resend_activation_code(
     if not user or await email_cooldown_active("activation", email):
         return {"detail": "Activation Code Sent"}
 
-    code = generate_random_code(6)
+    code = generate_random_code(VERIFICATION_CODE_LENGTH)
     await redis_manager.cache_json_item(
         activation_code_key(email), {"code": code}, ttl=60 * 30
     )
