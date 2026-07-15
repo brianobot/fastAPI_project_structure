@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     JWT_SECRET: str = ""  # REQUIRED in production (DEBUG=False); see validator below
     JWT_ALGORITHM: str = "HS256"  # optional environement variable with default value
 
+    # ensures the length of the otp codes used across the app is consistent
+    VERIFICATION_CODE_LENGTH: int = 6
+
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
 
