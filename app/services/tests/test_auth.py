@@ -168,8 +168,28 @@ async def test_signup_user(session: AsyncSession):
         session,
         BackgroundTasks(tasks=[]),
     )
-    assert isinstance(result, UserDB)
-    assert result.email == email
+    # Returns a generic message (non-enumerable), but the account is created.
+    assert result == {"detail": auth_services.GENERIC_SIGNUP_MESSAGE}
+    assert await auth_services.get_user(email, session) is not None
+
+
+async def test_signup_user_existing_email_is_silent(
+    user: UserDB, session: AsyncSession
+):
+    # Same message for an already-registered email; nothing leaks.
+    result = await auth_services.signup_user(
+        auth_schemas.UserSignUpData(email=user.email, password="password"),
+        session,
+        BackgroundTasks(tasks=[]),
+    )
+    assert result == {"detail": auth_services.GENERIC_SIGNUP_MESSAGE}
+
+
+async def test_email_cooldown_blocks_rapid_resends():
+    email = faker.email()
+    # First send is allowed, an immediate second is throttled.
+    assert await auth_services.email_cooldown_active("reset", email) is False
+    assert await auth_services.email_cooldown_active("reset", email) is True
 
 
 @pytest.mark.parametrize(
@@ -297,6 +317,30 @@ async def test_refresh_token_payload_return_none(session: AsyncSession):
                 session,
             )
     assert err.value.detail == "Invalid Refresh Token"
+
+
+async def test_refresh_reuse_kills_session_family(user: UserDB, session: AsyncSession):
+    initial = auth_services.create_refresh_token(
+        {"sub": user.email, "ver": 0}, auth_services.REFRESH_TOKEN_LIFESPAN
+    )
+    rotated = await auth_services.refresh_token(
+        auth_schemas.RefreshTokenModel(refresh_token=initial), session
+    )
+
+    # Replaying the old (rotated) token is a reuse signal -> escalate.
+    with pytest.raises(HTTPException):
+        await auth_services.refresh_token(
+            auth_schemas.RefreshTokenModel(refresh_token=initial), session
+        )
+
+    # The escalation bumped the token version, so even the freshly-issued
+    # refresh token from the first rotation is now rejected.
+    with pytest.raises(HTTPException) as err:
+        await auth_services.refresh_token(
+            auth_schemas.RefreshTokenModel(refresh_token=rotated.refresh_token),
+            session,
+        )
+    assert err.value.status_code == 401
 
 
 async def test_reset_password_locks_out_after_max_attempts(

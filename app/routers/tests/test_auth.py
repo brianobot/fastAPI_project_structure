@@ -4,14 +4,24 @@ from httpx import AsyncClient, Response
 from app.models import User as UserDB
 from app.redis_manager import redis_manager
 from app.schemas import auth as auth_schemas
-from app.schemas.auth import UserModel
+from app.services.auth import GENERIC_SIGNUP_MESSAGE
 
 
 async def test_signup_succeeds(client: AsyncClient, signup_data: dict[str, str]):
     response = await client.post("/v1/auth/signup", json=signup_data)
     assert response.status_code == 200
-    response_data = response.json()
-    assert UserModel.model_validate(response_data)
+    # Non-enumerable: a generic message, not the created user.
+    assert response.json()["detail"] == GENERIC_SIGNUP_MESSAGE
+
+
+async def test_signup_is_non_enumerable(client: AsyncClient, user: UserDB):
+    # Signing up with an ALREADY-registered email returns the same 200 +
+    # message as a fresh signup, so accounts can't be enumerated.
+    response = await client.post(
+        "/v1/auth/signup", json={"email": user.email, "password": "password123"}
+    )
+    assert response.status_code == 200
+    assert response.json()["detail"] == GENERIC_SIGNUP_MESSAGE
 
 
 @pytest.mark.parametrize(
@@ -189,6 +199,25 @@ async def test_logout_with_refresh_token_revokes_it(client: AsyncClient, user: U
         "/v1/auth/refresh_token", json={"refresh_token": refresh}
     )
     assert refreshed.status_code == 401
+
+
+async def test_password_reset_revokes_existing_sessions(
+    client: AsyncClient, user: UserDB
+):
+    login = {"username": user.email, "password": "password"}
+    access = (await client.post("/v1/auth/token", data=login)).json()["access_token"]
+    header = {"Authorization": f"Bearer {access}"}
+    assert (await client.get("/v1/auth/me", headers=header)).status_code == 200
+
+    await redis_manager.cache_json_item(f"reset-code-{user.email}", {"code": "000000"})
+    reset = await client.post(
+        "/v1/auth/reset_password",
+        json={"code": "000000", "email": user.email, "new_password": "brandnewpass"},
+    )
+    assert reset.status_code == 200
+
+    # The pre-reset access token must no longer authenticate.
+    assert (await client.get("/v1/auth/me", headers=header)).status_code == 401
 
 
 async def test_logout_invalidates_all_user_tokens(client: AsyncClient, user: UserDB):

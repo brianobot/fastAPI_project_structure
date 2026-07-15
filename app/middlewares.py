@@ -23,7 +23,48 @@ async def log_request_middleware(request: Request, call_next):
     return response
 
 
+class MaxBodySizeMiddleware(BaseHTTPMiddleware):
+    """Reject over-sized request bodies before they are buffered into memory."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        content_length = request.headers.get("content-length")
+        if (
+            content_length is not None
+            and content_length.isdigit()
+            and int(content_length) > settings.MAX_REQUEST_BODY_BYTES
+        ):
+            return JSONResponse(
+                status_code=413, content={"detail": "Request body too large"}
+            )
+        return await call_next(request)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add baseline hardening headers to every response."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # HSTS only makes sense over HTTPS; enable it outside local/dev.
+        if not settings.DEBUG:
+            response.headers[
+                "Strict-Transport-Security"
+            ] = "max-age=31536000; includeSubDomains"
+        return response
+
+
 class AllowAuthorizedDocAccess(BaseHTTPMiddleware):
+    # WARNING: `request.client.host` is the *proxy's* IP unless the app runs
+    # with --proxy-headers behind a trusted proxy. If your reverse proxy is
+    # co-located (e.g. on 127.0.0.1) and proxy headers are NOT enabled, every
+    # request appears to come from this list and the docs are exposed to all.
+    # Prefer gating docs by DEBUG in production, or ensure --proxy-headers.
     allowed_ips = [
         "127.0.0.1",  # allows Viewing Docs in Local Development Environment
     ]

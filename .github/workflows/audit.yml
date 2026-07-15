@@ -3,6 +3,9 @@ name: Dependency Security Audit
 on:
   push:
     branches: [ "dev" ]
+  schedule:
+    # Weekly scan catches newly-disclosed CVEs in already-pinned deps.
+    - cron: "0 6 * * 1"
 
 jobs:
   security-scan:
@@ -23,14 +26,14 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           # If using Poetry, add those steps here instead
 
-      - name: Scan with pip-audit
+      - name: Scan dependencies with pip-audit
         run: |
           pip install pip-audit
-          # This will fail the build if a vulnerability is found
-          pip-audit
+          # Fails the build on a vulnerable dependency
+          pip-audit -r requirements.txt
 
-      - name: Scan with Safety
+      - name: Scan source with Bandit (SAST)
         run: |
-          pip install safety
-          # Scans the current environment
-          safety check
+          pip install bandit
+          # Static analysis of app code; fail on medium+ findings, skip tests
+          bandit -r app -x app/models/tests,app/routers/tests,app/services/tests,app/schemas/tests,app/tests --severity-level medium

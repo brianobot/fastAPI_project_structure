@@ -21,7 +21,7 @@ EmailBody = Annotated[EmailStr, Body(embed=True)]
 CurrentUserDep = Annotated[UserDB, Depends(get_current_user)]
 
 
-@router.post("/signup", response_model=auth_schemas.UserModel)
+@router.post("/signup")
 @limiter.limit("5/minute")
 async def signup(
     request: Request,
@@ -29,6 +29,8 @@ async def signup(
     bg_task: BackgroundTasks,  # needed to send verification/welcome email
     payload: auth_schemas.UserSignUpData,
 ):
+    # Returns a generic message (not the user) so the response is identical
+    # whether or not the email is already registered - see signup_user.
     return await auth_services.signup_user(payload, db, bg_task)
 
 

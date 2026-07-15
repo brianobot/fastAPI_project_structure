@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -18,6 +19,44 @@ async def test_health_endpoint_ok(client):
     body = response.json()
     assert body["status"] == "ok"
     assert body["checks"] == {"database": "ok", "redis": "ok"}
+
+
+async def test_security_headers_present(client):
+    response = await client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert "referrer-policy" in response.headers
+
+
+async def test_oversized_request_body_rejected(client):
+    from app.settings import settings
+
+    big_body = "x" * (settings.MAX_REQUEST_BODY_BYTES + 1)
+    response = await client.post(
+        "/v1/auth/signup",
+        content=big_body,
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 413
+
+
+def test_weak_jwt_secret_rejected_in_production():
+    from pydantic import ValidationError
+
+    from app.settings import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(
+            DEBUG=False,
+            JWT_SECRET="too-short",
+            DATABASE_URL="x",
+            MAIL_USERNAME="a",
+            MAIL_PASSWORD="b",
+            MAIL_FROM="c",
+            MAIL_PORT="1",
+            MAIL_SERVER="d",
+            MAIL_FROM_NAME="e",
+        )
 
 
 async def test_http_exception_handler():

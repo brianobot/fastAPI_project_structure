@@ -28,6 +28,15 @@ independent, so apply them in any order you like and run your tests after each.
 | Global logout (token versioning) | **Breaking (tokens)** | Adds `ver` claim; see §11 |
 | Account lockout on codes | Behavioral | See §12 |
 | Rate limiting | **Optional** | Skip it — see §13 |
+| Revoke sessions on password change + reuse detection | Behavioral | See §14 |
+| Security response headers | Safe (additive) | See §15 |
+| Proxy headers behind a load balancer | Deploy config | See §16 |
+| CI hardening (SAST, lint gate, coverage floor) | Safe (additive) | See §17 |
+| Non-enumerable login + signup | **Breaking (API)** | Signup returns a message, not the user; see §18 |
+| Per-account email cooldown | Behavioral | See §19 |
+| Stronger `JWT_SECRET` (min length) | Behavioral | See §20 |
+| Body-size limit + global rate-limit backstop | Safe (additive) | See §21 |
+| Dependabot + scheduled/hashed deps | Safe (additive) | See §22 |
 
 **Backup first:** commit or branch before starting, and snapshot your database
 before running the migration in §6.
@@ -546,6 +555,195 @@ limiter.enabled = False
 
 If you enable it in a specific test, use a **unique client key per run** (the
 Redis-backed counter persists across runs within the window) to avoid flakiness.
+
+---
+
+## 14. Revoke sessions on password change + refresh-reuse detection
+
+Builds on the token versioning from §11.
+
+**Kill all sessions when the password changes.** A reset/change usually means the
+old credentials are compromised, so bump the token version after a successful
+`reset_password` (and after a password change in `update_user`):
+
+```python
+async def invalidate_all_sessions(email: str) -> None:
+    await redis_manager.increment(token_version_key(email))
+
+# reset_password(), after the password UPDATE commits:
+await invalidate_all_sessions(reset_data.email)
+
+# update_user(), after the UPDATE commits, only when the password changed:
+if new_password:
+    await invalidate_all_sessions(email)
+```
+
+> A password *change* logs the user out of their **current** session too (the
+> access token used for the request is invalidated for subsequent calls). That's
+> the secure default; have the client re-authenticate afterward.
+
+**Refresh-reuse detection.** A rotated refresh token should never come back. If a
+blacklisted refresh token is presented again, treat it as theft and revoke the
+whole family:
+
+```python
+if await redis_manager.get_json_item(token_data.refresh_token):
+    try:
+        stale = jwt.decode(token_data.refresh_token, JWT_SECRET,
+                           algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+        if isinstance(stale.get("sub"), str):
+            await invalidate_all_sessions(stale["sub"])
+    except InvalidTokenError:
+        pass
+    raise HTTPException(status_code=401, detail="Invalid Refresh Token")
+```
+
+**Readability tip (optional):** while you're here, move the Redis key formats into
+builder functions (`activation_code_key`, `reset_code_key`, `failed_attempts_key`,
+`token_version_key`) so formats and TTLs live in one place.
+
+---
+
+## 15. Security response headers
+
+Add a middleware that stamps hardening headers on every response:
+
+```python
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if not settings.DEBUG:   # HSTS only over HTTPS
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+```
+
+> A strict `Content-Security-Policy` is intentionally omitted — it breaks the
+> Swagger UI (CDN + inline scripts). Add one scoped to your own frontend if needed.
+
+---
+
+## 16. Proxy headers behind a load balancer
+
+Per-IP rate limiting and request logging read `request.client.host`. Behind a
+proxy that's the **proxy's** IP unless you enable forwarded headers — so run:
+
+```bash
+uvicorn app.main:app --proxy-headers --forwarded-allow-ips="<proxy-ip>"
+```
+
+Restrict `--forwarded-allow-ips` to your proxy's address(es); `"*"` trusts any
+client's `X-Forwarded-For` and is spoofable if you're not actually behind a proxy.
+
+---
+
+## 17. CI hardening (optional)
+
+- **Replace the dead `safety check`** (it now needs an account) with SAST:
+  `pip install bandit && bandit -r app -x <tests> --severity-level medium`.
+- **Add a lint/type gate** — run `ruff`, `black --check`, `isort --check-only`,
+  and `mypy app` as a CI job, not just in pre-commit.
+- **Floor your coverage**: `coverage report --fail-under=90` so it can't silently
+  regress.
+- **Bump CI Python to 3.12+** if you adopted the `PaginatedResponse[T]` generic
+  (PEP 695), and pin pre-commit `mypy` to ≥ 1.12.
+
+---
+
+## 18. Non-enumerable authentication
+
+Stop attackers from discovering which emails have accounts.
+
+- **Constant-time login.** `authenticate_user` must spend the same bcrypt time
+  whether or not the user exists — otherwise response timing leaks account
+  existence. Compare against a precomputed dummy hash on the missing-user path:
+
+  ```python
+  _DUMMY_PASSWORD_HASH = get_password_hash(secrets.token_urlsafe(32))
+
+  user = await get_user(username, session)
+  if not user:
+      verify_password(password, _DUMMY_PASSWORD_HASH)  # equalize timing
+      return False
+  ```
+
+- **Non-enumerable signup.** Don't return `400 "Email already registered"`.
+  Respond with the same generic message (and 200) whether or not the email is
+  taken; run a dummy `get_password_hash` on the existing-email path to match
+  timing, and send nothing for an existing account. The signup route no longer
+  uses `response_model=UserModel` — it returns `{"detail": "..."}`.
+
+## 19. Per-account email cooldown
+
+Rate limits are per-IP; add a per-account cooldown so a distributed attacker
+can't email-bomb a victim with reset/activation mail:
+
+```python
+CODE_EMAIL_COOLDOWN_SECONDS = 60
+
+async def email_cooldown_active(scope: str, email: str) -> bool:
+    key = f"cooldown-{scope}-{email}"
+    if await redis_manager.get_int(key):
+        return True
+    await redis_manager.increment(key, ttl=CODE_EMAIL_COOLDOWN_SECONDS)
+    return False
+
+# in initiate_password_reset / resend_activation, before sending:
+if not user or await email_cooldown_active("reset", email):
+    return {"detail": "Password Reset Code Sent"}   # same generic response
+```
+
+## 20. Stronger JWT secret
+
+HS256 security is only as strong as the secret. Require real length in
+production (not just non-empty) so a guessable secret can't be used to forge
+tokens:
+
+```python
+MIN_JWT_SECRET_LENGTH = 32
+
+@model_validator(mode="after")
+def _require_strong_jwt_secret_in_production(self):
+    if not self.DEBUG and len(self.JWT_SECRET) < self.MIN_JWT_SECRET_LENGTH:
+        raise ValueError("JWT_SECRET must be >= 32 chars when DEBUG is False")
+    return self
+```
+
+## 21. Request size limit + global rate-limit backstop
+
+- **Body-size middleware** rejects oversized requests before they're buffered
+  (memory-exhaustion DoS):
+
+  ```python
+  class MaxBodySizeMiddleware(BaseHTTPMiddleware):
+      async def dispatch(self, request, call_next):
+          cl = request.headers.get("content-length")
+          if cl and cl.isdigit() and int(cl) > settings.MAX_REQUEST_BODY_BYTES:
+              return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+          return await call_next(request)
+  ```
+
+- **Global rate-limit backstop.** Per-route `@limiter.limit` leaves unlimited
+  everything you didn't decorate (e.g. `/health`). Give the limiter
+  `default_limits=["120/minute"]` and add `SlowAPIMiddleware` so every route has
+  a floor; per-route limits still override.
+
+## 22. Deployment hardening
+
+- **Proxy headers (see §16):** run with `--proxy-headers --forwarded-allow-ips`
+  set to your proxy's IP — **never `"*"`** (spoofable → rate-limit bypass). This
+  also makes the docs IP-allowlist trustworthy: without it, a co-located proxy
+  makes every client look like `127.0.0.1` and exposes `/docs`. Prefer gating
+  docs on `DEBUG` in production.
+- **Dependabot** (`.github/dependabot.yml`) for weekly `pip` + `github-actions`
+  update PRs, and a **scheduled** run of the audit workflow (cron) so
+  newly-disclosed CVEs in already-pinned deps are caught between pushes.
+- **Pin with hashes** (`pip-compile --generate-hashes`) to defeat registry
+  substitution — do this with pip-tools rather than by hand.
 
 ---
 
