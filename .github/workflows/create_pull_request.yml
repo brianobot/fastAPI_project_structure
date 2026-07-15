@@ -47,7 +47,7 @@ jobs:
       - name: Create .env file
         run: |
           echo "DATABASE_URL=sqlite+aiosqlite:///:memory:" >> .env
-          echo "JWT_SECRET=23oiefnergoiejrgio" >> .env
+          echo "JWT_SECRET=QQeN+k4IeRh5ziyGIWbKISx7v7g9k6+Ze1ApTOmqzk8=" >> .env
 
           echo "MAIL_USERNAME=$testusername@mail.com" >> .env
           echo "MAIL_FROM_NAME=$donotreply" >> .env
